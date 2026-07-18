@@ -221,9 +221,7 @@ fn default_cache_path() -> Result<PathBuf, io::Error> {
                 .filter(|path| !path.is_empty())
                 .map(|home| PathBuf::from(home).join(".cache"))
         })
-        .ok_or_else(|| {
-            io::Error::new(ErrorKind::NotFound, "XDG_CACHE_HOME and HOME are unset")
-        })?;
+        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "XDG_CACHE_HOME and HOME are unset"))?;
 
     Ok(cache_home.join("wordles"))
 }
@@ -357,17 +355,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     opts.optopt("", "dict", "Read words from dictionary file", "FILE");
     opts.optflag("", "frequency", "Print character frequencies");
-    opts.optflag(
-        "",
-        "patterns",
-        "Print sample patterns",
-    );
+    opts.optflag("", "patterns", "Print sample patterns");
     opts.optflag("", "words", "Print built-in dictionary");
-    opts.optflag(
-        "v",
-        "verbose",
-        "Print ranked words with scores",
-    );
+    opts.optflag("v", "verbose", "Print ranked words with scores");
     opts.optflag("V", "version", "Print version information");
     opts.optflag("h", "help", "Print this help message");
 
@@ -380,6 +370,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     if matches.opt_present("help") {
+        println!("A Wordle solver\n");
         print!("{}", opts.usage(&format!("Usage: {} [options]", args[0])));
         return Ok(());
     }
