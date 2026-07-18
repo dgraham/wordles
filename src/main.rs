@@ -241,7 +241,7 @@ fn rank_from_cache<T: Transaction>(
         let mut max = 0;
         let mut sum = 0;
 
-        for pattern in patterns.split(',') {
+        for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
             let key = format!("{word}:{pattern}");
             let words = std::str::from_utf8(txn.get(db, &key)?)?;
             let count = words
@@ -290,7 +290,7 @@ fn rank_without_cache(candidates: &HashSet<String>) -> Vec<Ranking> {
     rankings
 }
 
-fn print_rankings(mut rankings: Vec<Ranking>, verbose: bool) {
+fn print_rankings(mut rankings: Vec<Ranking>, limit: Option<usize>, verbose: bool) {
     rankings.sort_by(|a, b| {
         b.1.cmp(&a.1)
             .then_with(|| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
@@ -298,7 +298,11 @@ fn print_rankings(mut rankings: Vec<Ranking>, verbose: bool) {
             .then_with(|| a.0.cmp(&b.0))
     });
 
-    let rankings: Vec<_> = rankings.into_iter().take(10).collect();
+    let rankings = match limit {
+        Some(limit) => rankings.into_iter().take(limit).collect(),
+        None => rankings,
+    };
+
     if verbose {
         for (word, count, avg, max) in rankings.into_iter().rev() {
             println!("{word} {count} {max} {avg}");
@@ -318,42 +322,15 @@ fn print_rankings(mut rankings: Vec<Ranking>, verbose: bool) {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let mut opts = Options::new();
-    opts.optmulti(
-        "c",
-        "contains",
-        "Comma-delimited list of <char><pos> for contains rules",
-        "L3",
-    );
-    opts.optmulti(
-        "m",
-        "match",
-        "Comma-delimited list of <char><pos> for match rules",
-        "S1,E5",
-    );
-    opts.optmulti(
-        "n",
-        "none",
-        "Comma-delimited list of <char> for none rules",
-        "R,N",
-    );
-    opts.optmulti(
-        "o",
-        "once",
-        "Comma-delimited list of <char> for once rules",
-        "E",
-    );
-    opts.optflag(
-        "",
-        "no-cache",
-        "Rank without reading or writing the LMDB cache",
-    );
-    opts.optopt(
-        "",
-        "cache",
-        "Read or create the LMDB cache at this path",
-        "DIR",
-    );
+    opts.optmulti("c", "contains", "List of contains rules", "L3");
+    opts.optmulti("m", "match", "List of match rules", "S1,E5");
+    opts.optmulti("n", "none", "List of none rules", "R,N");
+    opts.optmulti("o", "once", "List of once rules", "E");
+    opts.optflag("", "no-cache", "Rank without reading or writing the cache");
+    opts.optopt("", "cache", "Read or create the cache at this path", "DIR");
     opts.optopt("", "dict", "Read words from dictionary file", "FILE");
+    opts.optopt("", "limit", "Limit output words (default: 5)", "NUM");
+    opts.optflag("", "no-limit", "Print all candidate words");
     opts.optflag("", "frequency", "Print character frequencies");
     opts.optflag("", "patterns", "Print sample patterns");
     opts.optflag("", "words", "Print built-in dictionary");
@@ -374,18 +351,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         print!("{}", opts.usage(&format!("Usage: {} [options]", args[0])));
         return Ok(());
     }
+
     if matches.opt_present("version") {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+
     if matches.opt_present("patterns") {
         print_patterns();
         return Ok(());
     }
+
     if matches.opt_present("words") {
         print!("{SOLUTIONS}");
         return Ok(());
     }
+
     if matches.opt_present("no-cache") && matches.opt_present("cache") {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
@@ -394,10 +375,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into());
     }
 
+    if matches.opt_present("limit") && matches.opt_present("no-limit") {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            "--limit cannot be used with --no-limit",
+        )
+        .into());
+    }
+
+    let limit = if matches.opt_present("no-limit") {
+        None
+    } else {
+        Some(match matches.opt_str("limit") {
+            Some(value) => value.parse::<usize>().map_err(|_| {
+                io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("invalid --limit value: {value}"),
+                )
+            })?,
+            None => 5,
+        })
+    };
+
     let words = match matches.opt_str("dict") {
         Some(path) => read_words(&read_to_string(path)?),
         None => read_words(SOLUTIONS),
     };
+
     if matches.opt_present("frequency") {
         print_frequency(&words);
         return Ok(());
@@ -418,6 +422,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+
     for m in matches.opt_strs("contains") {
         match split_char_pos(&m) {
             Ok(v) => {
@@ -431,6 +436,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+
     for m in matches.opt_strs("none") {
         let none: Vec<Rule> = m
             .split(',')
@@ -439,6 +445,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .collect();
         rules.extend(none);
     }
+
     for m in matches.opt_strs("once") {
         let once: Vec<Rule> = m
             .split(',')
@@ -470,7 +477,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let txn = env.begin_ro_txn()?;
         rank_from_cache(&txn, db, &candidates)?
     };
-    print_rankings(rankings, matches.opt_present("verbose"));
+    print_rankings(rankings, limit, matches.opt_present("verbose"));
 
     Ok(())
 }
