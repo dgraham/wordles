@@ -368,6 +368,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "verbose",
         "Print ranked words with scores",
     );
+    opts.optflag("V", "version", "Print version information");
     opts.optflag("h", "help", "Print this help message");
 
     let matches = match opts.parse(&args[1..]) {
@@ -380,6 +381,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if matches.opt_present("help") {
         print!("{}", opts.usage(&format!("Usage: {} [options]", args[0])));
+        return Ok(());
+    }
+    if matches.opt_present("version") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
     if matches.opt_present("patterns") {
