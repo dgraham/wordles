@@ -52,7 +52,8 @@ fn split_char_pos(s: &str) -> Result<Vec<(char, u8)>, String> {
             let ch = ch
                 .chars()
                 .next()
-                .ok_or_else(|| format!("Invalid entry '{}'", item))?;
+                .ok_or_else(|| format!("Invalid entry '{}'", item))?
+                .to_ascii_lowercase();
             let num: u8 = rest
                 .parse()
                 .map_err(|_| format!("Invalid number in '{}'", item))?;
@@ -440,7 +441,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for m in matches.opt_strs("none") {
         let none: Vec<Rule> = m
             .split(',')
-            .filter_map(|s| s.chars().next())
+            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
             .map(Rule::None)
             .collect();
         rules.extend(none);
@@ -449,7 +450,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for m in matches.opt_strs("once") {
         let once: Vec<Rule> = m
             .split(',')
-            .filter_map(|s| s.chars().next())
+            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
             .map(Rule::Once)
             .collect();
         rules.extend(once);
@@ -484,7 +485,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CONTAINS, HIT, diff};
+    use super::{CONTAINS, HIT, diff, split_char_pos};
+
+    #[test]
+    fn split_char_pos_normalizes_uppercase_letters() {
+        assert_eq!(split_char_pos("S1,L2"), Ok(vec![('s', 1), ('l', 2)]));
+    }
 
     #[test]
     fn diff_encodes_hits_and_misses() {
