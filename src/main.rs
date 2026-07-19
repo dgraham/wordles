@@ -5,101 +5,13 @@ use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
-use getopts::{Matches, Options};
-use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
+use getopts::Options;
+use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
+use wordles::rule::rules_from_matches;
+use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank_from_cache, rank_without_cache};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 const SOLUTIONS: &str = include_str!("../data/words");
-const MISS: u16 = 0b00;
-const HIT: u16 = 0b01;
-const CONTAINS: u16 = 0b10;
-
-#[derive(Debug)]
-enum Rule {
-    Contains(char, u8),
-    Match(char, u8),
-    None(char),
-    Once(char),
-}
-
-impl Rule {
-    pub fn matches(&self, word: &str) -> bool {
-        match *self {
-            Rule::Match(ch, pos) => word
-                .chars()
-                .nth((pos - 1) as usize)
-                .map_or(false, |c| c == ch),
-            Rule::Contains(ch, pos) => {
-                word.contains(ch)
-                    && !word
-                        .chars()
-                        .nth((pos - 1) as usize)
-                        .map_or(false, |c| c == ch)
-            }
-            Rule::None(ch) => !word.contains(ch),
-            Rule::Once(ch) => {
-                let count = word.chars().filter(|&c| c == ch).count();
-                count == 1
-            }
-        }
-    }
-}
-
-fn split_char_pos(s: &str) -> Result<Vec<(char, u8)>, String> {
-    s.split(',')
-        .map(|item| {
-            let (ch, rest) = item.split_at(1);
-            let ch = ch
-                .chars()
-                .next()
-                .ok_or_else(|| format!("Invalid entry '{}'", item))?
-                .to_ascii_lowercase();
-            let num: u8 = rest
-                .parse()
-                .map_err(|_| format!("Invalid number in '{}'", item))?;
-            Ok((ch, num))
-        })
-        .collect()
-}
-
-fn rules_from_matches(matches: &Matches) -> Result<Vec<Rule>, String> {
-    let mut rules = Vec::new();
-
-    for value in matches.opt_strs("match") {
-        let rules_from_value = split_char_pos(&value)
-            .map_err(|error| format!("Error parsing match: {error}"))?
-            .into_iter()
-            .map(|(ch, pos)| Rule::Match(ch, pos));
-        rules.extend(rules_from_value);
-    }
-
-    for value in matches.opt_strs("contains") {
-        let rules_from_value = split_char_pos(&value)
-            .map_err(|error| format!("Error parsing contains: {error}"))?
-            .into_iter()
-            .map(|(ch, pos)| Rule::Contains(ch, pos));
-        rules.extend(rules_from_value);
-    }
-
-    for value in matches.opt_strs("none") {
-        let rules_from_value = value
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::None);
-        rules.extend(rules_from_value);
-    }
-
-    for value in matches.opt_strs("once") {
-        let rules_from_value = value
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::Once);
-        rules.extend(rules_from_value);
-    }
-
-    Ok(rules)
-}
-
 fn read_words(dictionary: &str) -> Vec<String> {
     dictionary.lines().map(str::to_lowercase).collect()
 }
@@ -122,20 +34,6 @@ fn print_frequency(words: &[String]) {
     for (ch, count) in counts {
         println!("{ch} {}", count as f64 / total * 100.0);
     }
-}
-
-fn diff(guess: &str, candidate: &str) -> u16 {
-    guess.chars().enumerate().fold(0, |pattern, (index, ch)| {
-        let value = if candidate.chars().nth(index) == Some(ch) {
-            HIT
-        } else if candidate.contains(ch) {
-            CONTAINS
-        } else {
-            MISS
-        };
-
-        pattern | (value << (8 - index * 2))
-    })
 }
 
 fn square(value: u16) -> &'static str {
@@ -265,93 +163,25 @@ fn default_cache_path() -> Result<PathBuf, io::Error> {
     Ok(cache_home.join("wordles"))
 }
 
-type Ranking = (String, usize, f64, usize);
-
-fn rank_from_cache<T: Transaction>(
-    txn: &T,
-    db: Database,
-    candidates: &HashSet<String>,
-) -> Result<Vec<Ranking>, Box<dyn Error>> {
-    let mut rankings = Vec::new();
-
-    for word in candidates {
-        let patterns = std::str::from_utf8(txn.get(db, word)?)?;
-        let mut groups = 0;
-        let mut max = 0;
-        let mut sum = 0;
-
-        for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
-            let key = format!("{word}:{pattern}");
-            let words = std::str::from_utf8(txn.get(db, &key)?)?;
-            let count = words
-                .split(',')
-                .filter(|candidate| candidates.contains(*candidate))
-                .count();
-
-            if count > 0 {
-                max = max.max(count);
-                sum += count;
-                groups += 1;
-            }
-        }
-
-        if groups > 0 {
-            rankings.push((word.clone(), groups, sum as f64 / groups as f64, max));
-        }
-    }
-
-    Ok(rankings)
-}
-
-fn rank_without_cache(candidates: &HashSet<String>) -> Vec<Ranking> {
-    let mut rankings = Vec::new();
-
-    for word in candidates {
-        let mut pattern_counts = HashMap::new();
-        for candidate in candidates {
-            let pattern = diff(word, candidate);
-            if pattern != 0 {
-                *pattern_counts.entry(pattern).or_insert(0) += 1;
-            }
-        }
-
-        let groups = pattern_counts.len();
-        if groups > 0 {
-            let max = *pattern_counts
-                .values()
-                .max()
-                .expect("non-empty pattern counts");
-            let sum: usize = pattern_counts.values().sum();
-            rankings.push((word.clone(), groups, sum as f64 / groups as f64, max));
-        }
-    }
-
-    rankings
-}
-
-fn print_rankings(mut rankings: Vec<Ranking>, limit: Option<usize>, verbose: bool) {
-    rankings.sort_by(|a, b| {
-        b.1.cmp(&a.1)
-            .then_with(|| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
-            .then_with(|| a.3.cmp(&b.3))
-            .then_with(|| a.0.cmp(&b.0))
-    });
-
+fn print_rankings(rankings: Vec<Ranking>, limit: Option<usize>, verbose: bool) {
     let rankings = match limit {
         Some(limit) => rankings.into_iter().take(limit).collect(),
         None => rankings,
     };
 
     if verbose {
-        for (word, count, avg, max) in rankings.into_iter().rev() {
-            println!("{word} {count} {max} {avg}");
+        for ranking in rankings.into_iter().rev() {
+            println!(
+                "{} {} {} {}",
+                ranking.word, ranking.groups, ranking.max, ranking.average
+            );
         }
     } else {
         println!(
             "{}",
             rankings
                 .iter()
-                .map(|(word, _, _, _)| word.as_str())
+                .map(|ranking| ranking.word.as_str())
                 .collect::<Vec<_>>()
                 .join(" ")
         );
@@ -479,25 +309,4 @@ fn main() -> Result<(), Box<dyn Error>> {
     print_rankings(rankings, limit, matches.opt_present("verbose"));
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{CONTAINS, HIT, diff, split_char_pos};
-
-    #[test]
-    fn split_char_pos_normalizes_uppercase_letters() {
-        assert_eq!(split_char_pos("S1,L2"), Ok(vec![('s', 1), ('l', 2)]));
-    }
-
-    #[test]
-    fn diff_encodes_hits_and_misses() {
-        assert_eq!(diff("abcde", "axcye"), 0b01_00_01_00_01);
-    }
-
-    #[test]
-    fn diff_encodes_contained_letters() {
-        assert_eq!(diff("abcde", "ezzzz"), CONTAINS);
-        assert_eq!(diff("abcde", "abcde"), HIT * 0b01_01_01_01_01);
-    }
 }
