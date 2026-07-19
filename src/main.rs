@@ -5,7 +5,7 @@ use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
-use getopts::Options;
+use getopts::{Matches, Options};
 use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
@@ -60,6 +60,44 @@ fn split_char_pos(s: &str) -> Result<Vec<(char, u8)>, String> {
             Ok((ch, num))
         })
         .collect()
+}
+
+fn rules_from_matches(matches: &Matches) -> Result<Vec<Rule>, String> {
+    let mut rules = Vec::new();
+
+    for value in matches.opt_strs("match") {
+        let rules_from_value = split_char_pos(&value)
+            .map_err(|error| format!("Error parsing match: {error}"))?
+            .into_iter()
+            .map(|(ch, pos)| Rule::Match(ch, pos));
+        rules.extend(rules_from_value);
+    }
+
+    for value in matches.opt_strs("contains") {
+        let rules_from_value = split_char_pos(&value)
+            .map_err(|error| format!("Error parsing contains: {error}"))?
+            .into_iter()
+            .map(|(ch, pos)| Rule::Contains(ch, pos));
+        rules.extend(rules_from_value);
+    }
+
+    for value in matches.opt_strs("none") {
+        let rules_from_value = value
+            .split(',')
+            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
+            .map(Rule::None);
+        rules.extend(rules_from_value);
+    }
+
+    for value in matches.opt_strs("once") {
+        let rules_from_value = value
+            .split(',')
+            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
+            .map(Rule::Once);
+        rules.extend(rules_from_value);
+    }
+
+    Ok(rules)
 }
 
 fn read_words(dictionary: &str) -> Vec<String> {
@@ -408,53 +446,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let mut rules = Vec::new();
-
-    for m in matches.opt_strs("match") {
-        match split_char_pos(&m) {
-            Ok(v) => {
-                v.iter().for_each(|&(ch, num)| {
-                    rules.push(Rule::Match(ch, num));
-                });
-            }
-            Err(e) => {
-                eprintln!("Error parsing match: {}", e);
-                std::process::exit(1);
-            }
+    let rules = match rules_from_matches(&matches) {
+        Ok(rules) => rules,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
         }
-    }
-
-    for m in matches.opt_strs("contains") {
-        match split_char_pos(&m) {
-            Ok(v) => {
-                v.iter().for_each(|&(ch, num)| {
-                    rules.push(Rule::Contains(ch, num));
-                });
-            }
-            Err(e) => {
-                eprintln!("Error parsing contains: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    for m in matches.opt_strs("none") {
-        let none: Vec<Rule> = m
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::None)
-            .collect();
-        rules.extend(none);
-    }
-
-    for m in matches.opt_strs("once") {
-        let once: Vec<Rule> = m
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::Once)
-            .collect();
-        rules.extend(once);
-    }
+    };
 
     let candidates: HashSet<String> = words
         .iter()
