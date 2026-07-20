@@ -7,11 +7,12 @@ use std::path::{Path, PathBuf};
 
 use getopts::Options;
 use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
-use wordles::rule::rules_from_matches;
+use wordles::rule::RuleSet;
 use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank_from_cache, rank_without_cache};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 const SOLUTIONS: &str = include_str!("../data/words");
+
 fn read_words(dictionary: &str) -> Vec<String> {
     dictionary.lines().map(str::to_lowercase).collect()
 }
@@ -276,7 +277,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let rules = match rules_from_matches(&matches) {
+    let rules = match RuleSet::builder()
+        .matches(matches.opt_strs("match"))
+        .contains(matches.opt_strs("contains"))
+        .none(matches.opt_strs("none"))
+        .once(matches.opt_strs("once"))
+        .build()
+    {
         Ok(rules) => rules,
         Err(error) => {
             eprintln!("{error}");
@@ -286,7 +293,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let candidates: HashSet<String> = words
         .iter()
-        .filter(|word| rules.iter().all(|rule| rule.matches(word)))
+        .filter(|word| rules.matches(word))
         .cloned()
         .collect();
 

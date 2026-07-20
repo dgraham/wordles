@@ -1,5 +1,3 @@
-use getopts::Matches;
-
 #[derive(Debug)]
 pub enum Rule {
     Contains(char, u8),
@@ -28,67 +26,174 @@ impl Rule {
     }
 }
 
-fn split_char_pos(s: &str) -> Result<Vec<(char, u8)>, String> {
-    s.split(',')
-        .map(|item| {
-            let (ch, rest) = item.split_at(1);
-            let ch = ch
-                .chars()
-                .next()
-                .ok_or_else(|| format!("Invalid entry '{}'", item))?
-                .to_ascii_lowercase();
-            let pos: u8 = rest
-                .parse()
-                .map_err(|_| format!("Invalid number in '{}'", item))?;
-            Ok((ch, pos))
-        })
-        .collect()
+#[derive(Debug, PartialEq, Eq)]
+struct CharPos {
+    ch: char,
+    pos: u8,
 }
 
-pub fn rules_from_matches(matches: &Matches) -> Result<Vec<Rule>, String> {
-    let mut rules = Vec::new();
+impl TryFrom<&str> for CharPos {
+    type Error = String;
 
-    for value in matches.opt_strs("match") {
-        let rules_from_value = split_char_pos(&value)
-            .map_err(|error| format!("Error parsing match: {error}"))?
-            .into_iter()
-            .map(|(ch, pos)| Rule::Match(ch, pos));
-        rules.extend(rules_from_value);
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let mut chars = value.chars();
+        let ch = chars
+            .next()
+            .ok_or_else(|| format!("Invalid entry '{}'", value))?
+            .to_ascii_lowercase();
+        let pos = chars
+            .as_str()
+            .parse()
+            .map_err(|_| format!("Invalid number in '{}'", value))?;
+
+        Ok(Self { ch, pos })
+    }
+}
+
+pub struct RuleSet {
+    rules: Vec<Rule>,
+}
+
+impl RuleSet {
+    pub fn new() -> Self {
+        Self { rules: Vec::new() }
     }
 
-    for value in matches.opt_strs("contains") {
-        let rules_from_value = split_char_pos(&value)
-            .map_err(|error| format!("Error parsing contains: {error}"))?
-            .into_iter()
-            .map(|(ch, pos)| Rule::Contains(ch, pos));
-        rules.extend(rules_from_value);
+    pub fn builder() -> RuleSetBuilder {
+        RuleSetBuilder::default()
     }
 
-    for value in matches.opt_strs("none") {
-        let rules_from_value = value
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::None);
-        rules.extend(rules_from_value);
+    pub fn add(mut self, rule: Rule) -> Self {
+        self.rules.push(rule);
+        self
     }
 
-    for value in matches.opt_strs("once") {
-        let rules_from_value = value
-            .split(',')
-            .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            .map(Rule::Once);
-        rules.extend(rules_from_value);
+    pub fn matches(&self, word: &str) -> bool {
+        self.rules.iter().all(|rule| rule.matches(word))
+    }
+}
+
+#[derive(Default)]
+pub struct RuleSetBuilder {
+    match_values: Vec<String>,
+    contains_values: Vec<String>,
+    none_values: Vec<String>,
+    once_values: Vec<String>,
+}
+
+impl RuleSetBuilder {
+    pub fn matches(mut self, values: Vec<String>) -> Self {
+        self.match_values = values;
+        self
     }
 
-    Ok(rules)
+    pub fn contains(mut self, values: Vec<String>) -> Self {
+        self.contains_values = values;
+        self
+    }
+
+    pub fn none(mut self, values: Vec<String>) -> Self {
+        self.none_values = values;
+        self
+    }
+
+    pub fn once(mut self, values: Vec<String>) -> Self {
+        self.once_values = values;
+        self
+    }
+
+    pub fn build(self) -> Result<RuleSet, String> {
+        let mut rules = RuleSet::new();
+
+        for value in self.match_values {
+            for CharPos { ch, pos } in value
+                .split(',')
+                .map(CharPos::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Error parsing match: {error}"))?
+            {
+                rules = rules.add(Rule::Match(ch, pos));
+            }
+        }
+
+        for value in self.contains_values {
+            for CharPos { ch, pos } in value
+                .split(',')
+                .map(CharPos::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Error parsing contains: {error}"))?
+            {
+                rules = rules.add(Rule::Contains(ch, pos));
+            }
+        }
+
+        for value in self.none_values {
+            for ch in value
+                .split(',')
+                .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
+            {
+                rules = rules.add(Rule::None(ch));
+            }
+        }
+
+        for value in self.once_values {
+            for ch in value
+                .split(',')
+                .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
+            {
+                rules = rules.add(Rule::Once(ch));
+            }
+        }
+
+        Ok(rules)
+    }
+}
+
+impl Default for RuleSet {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::split_char_pos;
+    use super::{CharPos, Rule, RuleSet};
 
     #[test]
-    fn split_char_pos_normalizes_uppercase_letters() {
-        assert_eq!(split_char_pos("S1,L2"), Ok(vec![('s', 1), ('l', 2)]));
+    fn empty_rulesets_match_every_word() {
+        assert!(RuleSet::new().matches("slate"));
+        assert!(RuleSet::default().matches("slate"));
+    }
+
+    #[test]
+    fn ruleset_adds_single_rules() {
+        let rules = RuleSet::new()
+            .add(Rule::Match('s', 1))
+            .add(Rule::Contains('l', 3))
+            .add(Rule::None('r'))
+            .add(Rule::None('n'))
+            .add(Rule::Once('e'));
+
+        assert!(rules.matches("slate"));
+        assert!(!rules.matches("spate"));
+    }
+
+    #[test]
+    fn builder_creates_ruleset() {
+        let rules = RuleSet::builder()
+            .matches(vec!["S1".to_string()])
+            .contains(vec!["L3".to_string()])
+            .none(vec!["R,N".to_string()])
+            .once(vec!["E".to_string()])
+            .build()
+            .unwrap();
+
+        assert!(rules.matches("slate"));
+        assert!(!rules.matches("spate"));
+    }
+
+    #[test]
+    fn char_pos_normalizes_uppercase_letters() {
+        assert_eq!(CharPos::try_from("S1"), Ok(CharPos { ch: 's', pos: 1 }));
     }
 }
