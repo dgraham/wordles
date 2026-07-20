@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::env;
 use std::error::Error;
@@ -13,27 +14,56 @@ use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank_from_cache, rank_without_
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 const SOLUTIONS: &str = include_str!("../data/words");
 
+#[derive(Debug, Eq, PartialEq)]
+struct CharFreq {
+    ch: char,
+    count: usize,
+}
+
+impl Ord for CharFreq {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .count
+            .cmp(&self.count)
+            .then_with(|| self.ch.cmp(&other.ch))
+    }
+}
+
+impl PartialOrd for CharFreq {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 fn read_words(dictionary: &str) -> Vec<String> {
     dictionary.lines().map(str::to_lowercase).collect()
 }
 
-fn print_frequency(words: &[String]) {
-    let mut counts: Vec<(char, usize)> = Vec::new();
+fn frequencies(words: &[String]) -> Vec<CharFreq> {
+    let mut counts = HashMap::new();
 
     for word in words {
         for ch in word.chars() {
-            if let Some((_, count)) = counts.iter_mut().find(|(letter, _)| *letter == ch) {
-                *count += 1;
-            } else {
-                counts.push((ch, 1));
-            }
+            *counts.entry(ch).or_insert(0) += 1;
         }
     }
 
-    counts.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut counts: Vec<CharFreq> = counts
+        .into_iter()
+        .map(|(ch, count)| CharFreq { ch, count })
+        .collect();
+    counts.sort();
+    counts
+}
+
+fn print_frequencies(words: &[String]) {
     let total = (words.len() * 5) as f64;
-    for (ch, count) in counts {
-        println!("{ch} {}", count as f64 / total * 100.0);
+    for frequency in frequencies(words) {
+        println!(
+            "{} {}",
+            frequency.ch,
+            frequency.count as f64 / total * 100.0
+        );
     }
 }
 
@@ -148,6 +178,24 @@ fn dump_patterns(words: &[String], path: &Path) -> Result<(), Box<dyn Error>> {
 
     txn.commit()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CharFreq, frequencies};
+
+    #[test]
+    fn frequencies_returns_counts_in_descending_order() {
+        let words = vec!["aaaaa".to_string(), "bbbba".to_string()];
+
+        assert_eq!(
+            frequencies(&words),
+            vec![
+                CharFreq { ch: 'a', count: 6 },
+                CharFreq { ch: 'b', count: 4 }
+            ]
+        );
+    }
 }
 
 fn default_cache_path() -> Result<PathBuf, io::Error> {
@@ -273,7 +321,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     if matches.opt_present("frequency") {
-        print_frequency(&words);
+        print_frequencies(&words);
         return Ok(());
     }
 
