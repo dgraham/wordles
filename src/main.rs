@@ -2,16 +2,15 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::env;
 use std::error::Error;
-use std::fs::{create_dir_all, read_to_string};
+use std::fs::read_to_string;
 use std::io::{self, ErrorKind};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use getopts::Options;
-use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
+use wordles::cache::Cache;
 use wordles::rule::RuleSet;
-use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank_from_cache, rank_without_cache};
+use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank};
 
-const MAP_SIZE: usize = 64 * 1024 * 1024;
 const SOLUTIONS: &str = include_str!("../data/words");
 
 #[derive(Debug, Eq, PartialEq)]
@@ -136,50 +135,6 @@ fn print_patterns() {
     }
 }
 
-fn dump_patterns(words: &[String], path: &Path) -> Result<(), Box<dyn Error>> {
-    create_dir_all(path)?;
-
-    let env = Environment::new().set_map_size(MAP_SIZE).open(path)?;
-    let db = env.create_db(None, DatabaseFlags::empty())?;
-    let mut txn = env.begin_rw_txn()?;
-    for word in words {
-        let mut patterns: HashMap<u16, Vec<&str>> = HashMap::new();
-        let mut pattern_order = Vec::new();
-
-        for candidate in words {
-            let pattern = diff(word, candidate);
-            if pattern != 0 {
-                match patterns.entry(pattern) {
-                    Entry::Occupied(entry) => entry.into_mut().push(candidate),
-                    Entry::Vacant(entry) => {
-                        pattern_order.push(pattern);
-                        entry.insert(vec![candidate]);
-                    }
-                }
-            }
-        }
-
-        let pattern_keys = pattern_order
-            .iter()
-            .map(u16::to_string)
-            .collect::<Vec<_>>()
-            .join(",");
-        txn.put(db, word, &pattern_keys, WriteFlags::empty())?;
-
-        for pattern in pattern_order {
-            let candidates = patterns
-                .get(&pattern)
-                .expect("pattern order only contains inserted patterns");
-            let key = format!("{word}:{pattern}");
-            let value = candidates.join(",");
-            txn.put(db, &key, &value, WriteFlags::empty())?;
-        }
-    }
-
-    txn.commit()?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{CharFreq, frequencies};
@@ -198,32 +153,10 @@ mod tests {
     }
 }
 
-fn default_cache_path() -> Result<PathBuf, io::Error> {
-    let cache_home = env::var_os("XDG_CACHE_HOME")
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            env::var_os("HOME")
-                .filter(|path| !path.is_empty())
-                .map(|home| PathBuf::from(home).join(".cache"))
-        })
-        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "XDG_CACHE_HOME and HOME are unset"))?;
-
-    Ok(cache_home.join("wordles"))
-}
-
-fn print_rankings(rankings: Vec<Ranking>, limit: Option<usize>, verbose: bool) {
-    let rankings = match limit {
-        Some(limit) => rankings.into_iter().take(limit).collect(),
-        None => rankings,
-    };
-
+fn print_rankings(rankings: Vec<Ranking>, verbose: bool) {
     if verbose {
         for ranking in rankings.into_iter().rev() {
-            println!(
-                "{} {} {} {}",
-                ranking.word, ranking.groups, ranking.max, ranking.average
-            );
+            println!("{ranking}");
         }
     } else {
         println!(
@@ -346,22 +279,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect();
 
     let rankings = if matches.opt_present("no-cache") {
-        rank_without_cache(&candidates)
+        rank(&candidates)
     } else {
         let path = matches
             .opt_str("cache")
             .map(PathBuf::from)
-            .unwrap_or(default_cache_path()?);
-        if !path.join("data.mdb").is_file() {
-            dump_patterns(&words, &path)?;
+            .unwrap_or(Cache::default_path()?);
+        let cache = Cache::new(path);
+        if !cache.exists() {
+            cache.write(&words)?;
         }
-
-        let env = Environment::new().set_map_size(MAP_SIZE).open(&path)?;
-        let db = env.open_db(None)?;
-        let txn = env.begin_ro_txn()?;
-        rank_from_cache(&txn, db, &candidates)?
+        cache.rank(&candidates)?
     };
-    print_rankings(rankings, limit, matches.opt_present("verbose"));
+
+    let rankings = match limit {
+        Some(limit) => rankings.into_iter().take(limit).collect(),
+        None => rankings,
+    };
+
+    print_rankings(rankings, matches.opt_present("verbose"));
 
     Ok(())
 }

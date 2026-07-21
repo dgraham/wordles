@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::fmt;
 
-use lmdb::{Database, Transaction};
-
+pub mod cache;
 pub mod rule;
 
 pub const MISS: u16 = 0b00;
@@ -42,6 +41,16 @@ impl PartialEq for Ranking {
 
 impl Eq for Ranking {}
 
+impl fmt::Display for Ranking {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} {} {}",
+            self.word, self.groups, self.max, self.average
+        )
+    }
+}
+
 pub fn diff(guess: &str, candidate: &str) -> u16 {
     guess.chars().enumerate().fold(0, |pattern, (index, ch)| {
         let value = if candidate.chars().nth(index) == Some(ch) {
@@ -56,49 +65,7 @@ pub fn diff(guess: &str, candidate: &str) -> u16 {
     })
 }
 
-pub fn rank_from_cache<T: Transaction>(
-    txn: &T,
-    db: Database,
-    candidates: &HashSet<String>,
-) -> Result<Vec<Ranking>, Box<dyn Error>> {
-    let mut rankings = Vec::new();
-
-    for word in candidates {
-        let patterns = std::str::from_utf8(txn.get(db, word)?)?;
-        let mut groups = 0;
-        let mut max = 0;
-        let mut sum = 0;
-
-        for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
-            let key = format!("{word}:{pattern}");
-            let words = std::str::from_utf8(txn.get(db, &key)?)?;
-            let count = words
-                .split(',')
-                .filter(|candidate| candidates.contains(*candidate))
-                .count();
-
-            if count > 0 {
-                max = max.max(count);
-                sum += count;
-                groups += 1;
-            }
-        }
-
-        if groups > 0 {
-            rankings.push(Ranking {
-                word: word.clone(),
-                groups,
-                average: sum as f64 / groups as f64,
-                max,
-            });
-        }
-    }
-
-    rankings.sort();
-    Ok(rankings)
-}
-
-pub fn rank_without_cache(candidates: &HashSet<String>) -> Vec<Ranking> {
+pub fn rank(candidates: &HashSet<String>) -> Vec<Ranking> {
     let mut rankings = Vec::new();
 
     for word in candidates {
@@ -134,7 +101,7 @@ pub fn rank_without_cache(candidates: &HashSet<String>) -> Vec<Ranking> {
 mod tests {
     use std::collections::HashSet;
 
-    use super::{CONTAINS, HIT, Ranking, diff, rank_without_cache};
+    use super::{CONTAINS, HIT, Ranking, diff, rank};
 
     #[test]
     fn rank_without_cache_returns_sorted_rankings() {
@@ -144,7 +111,7 @@ mod tests {
             "trace".to_string(),
         ]);
 
-        assert!(rank_without_cache(&candidates).is_sorted());
+        assert!(rank(&candidates).is_sorted());
     }
 
     #[test]
@@ -180,6 +147,18 @@ mod tests {
 
         let words: Vec<_> = rankings.iter().map(|ranking| &ranking.word).collect();
         assert_eq!(words, ["groups", "max", "alpha", "average"]);
+    }
+
+    #[test]
+    fn ranking_displays_scores() {
+        let ranking = Ranking {
+            word: "slate".to_string(),
+            groups: 12,
+            average: 1.5,
+            max: 3,
+        };
+
+        assert_eq!(ranking.to_string(), "slate 12 3 1.5");
     }
 
     #[test]
