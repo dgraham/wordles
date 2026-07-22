@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::env;
 use std::error::Error;
-use std::fs::read_to_string;
+use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 
@@ -291,8 +291,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             .opt_str("cache")
             .map(PathBuf::from)
             .unwrap_or(Cache::default_path()?);
-        let cache = Cache::new(path);
-        if !cache.exists() {
+        let needs_write = !Cache::exists(&path);
+        create_dir_all(&path)?;
+        let cache = Cache::open(path)?;
+        if needs_write {
             cache.write(&words)?;
         }
         cache.rank(&candidates)?

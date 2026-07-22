@@ -1,36 +1,74 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::env;
 use std::error::Error;
-use std::fs::create_dir_all;
+use std::fmt;
 use std::io;
-use std::path::PathBuf;
-use std::str::from_utf8;
+use std::path::{Path, PathBuf};
+use std::str::{Utf8Error, from_utf8};
 
-use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
+use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
 
 use crate::{Ranking, diff};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 
+#[derive(Debug)]
+pub enum CacheError {
+    Lmdb(lmdb::Error),
+    Utf8(Utf8Error),
+}
+
+impl fmt::Display for CacheError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lmdb(error) => error.fmt(f),
+            Self::Utf8(error) => error.fmt(f),
+        }
+    }
+}
+
+impl Error for CacheError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Lmdb(error) => Some(error),
+            Self::Utf8(error) => Some(error),
+        }
+    }
+}
+
+impl From<lmdb::Error> for CacheError {
+    fn from(error: lmdb::Error) -> Self {
+        Self::Lmdb(error)
+    }
+}
+
+impl From<Utf8Error> for CacheError {
+    fn from(error: Utf8Error) -> Self {
+        Self::Utf8(error)
+    }
+}
+
 pub struct Cache {
-    path: PathBuf,
+    env: Environment,
+    db: Database,
 }
 
 impl Cache {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, lmdb::Error> {
+        let path = path.into();
 
-    pub fn exists(&self) -> bool {
-        self.path.join("data.mdb").is_file()
-    }
-
-    pub fn write(&self, words: &[String]) -> Result<(), Box<dyn Error>> {
-        create_dir_all(&self.path)?;
-
-        let env = Environment::new().set_map_size(MAP_SIZE).open(&self.path)?;
+        let env = Environment::new().set_map_size(MAP_SIZE).open(&path)?;
         let db = env.create_db(None, DatabaseFlags::empty())?;
-        let mut txn = env.begin_rw_txn()?;
+
+        Ok(Self { env, db })
+    }
+
+    pub fn exists(path: &Path) -> bool {
+        path.join("data.mdb").is_file()
+    }
+
+    pub fn write(&self, words: &[String]) -> Result<(), lmdb::Error> {
+        let mut txn = self.env.begin_rw_txn()?;
         for word in words {
             let mut patterns: HashMap<u16, Vec<&str>> = HashMap::new();
             let mut pattern_order = Vec::new();
@@ -53,7 +91,7 @@ impl Cache {
                 .map(u16::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            txn.put(db, word, &pattern_keys, WriteFlags::empty())?;
+            txn.put(self.db, word, &pattern_keys, WriteFlags::empty())?;
 
             for pattern in pattern_order {
                 let candidates = patterns
@@ -61,10 +99,9 @@ impl Cache {
                     .expect("pattern order only contains inserted patterns");
                 let key = format!("{word}:{pattern}");
                 let value = candidates.join(",");
-                txn.put(db, &key, &value, WriteFlags::empty())?;
+                txn.put(self.db, &key, &value, WriteFlags::empty())?;
             }
         }
-
         txn.commit()?;
         Ok(())
     }
@@ -85,21 +122,19 @@ impl Cache {
         Ok(cache_home.join("wordles"))
     }
 
-    pub fn rank(&self, candidates: &HashSet<String>) -> Result<Vec<Ranking>, Box<dyn Error>> {
-        let env = Environment::new().set_map_size(MAP_SIZE).open(&self.path)?;
-        let db = env.open_db(None)?;
-        let txn = env.begin_ro_txn()?;
+    pub fn rank(&self, candidates: &HashSet<String>) -> Result<Vec<Ranking>, CacheError> {
+        let txn = self.env.begin_ro_txn()?;
         let mut rankings = Vec::new();
 
         for word in candidates {
-            let patterns = from_utf8(txn.get(db, word)?)?;
+            let patterns = from_utf8(txn.get(self.db, word)?)?;
             let mut groups = 0;
             let mut max = 0;
             let mut sum = 0;
 
             for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
                 let key = format!("{word}:{pattern}");
-                let words = from_utf8(txn.get(db, &key)?)?;
+                let words = from_utf8(txn.get(self.db, &key)?)?;
                 let count = words
                     .split(',')
                     .filter(|candidate| candidates.contains(*candidate))
