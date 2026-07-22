@@ -153,21 +153,27 @@ mod tests {
     }
 }
 
-fn print_rankings(rankings: Vec<Ranking>, verbose: bool) {
-    if verbose {
-        for ranking in rankings.into_iter().rev() {
-            println!("{ranking}");
-        }
-    } else {
-        println!(
-            "{}",
-            rankings
-                .iter()
-                .map(|ranking| ranking.word.as_str())
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
+fn print_verbose(rankings: &[Ranking]) {
+    let output = rankings
+        .into_iter()
+        .rev()
+        .map(|ranking| ranking.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !output.is_empty() {
+        println!("{output}");
     }
+}
+
+fn print_inline(rankings: &[Ranking]) {
+    println!(
+        "{}",
+        rankings
+            .iter()
+            .map(|ranking| ranking.word.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -297,7 +303,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         None => rankings,
     };
 
-    print_rankings(rankings, matches.opt_present("verbose"));
+    if matches.opt_present("verbose") {
+        print_verbose(&rankings);
+    } else {
+        print_inline(&rankings);
+    }
 
     Ok(())
 }
