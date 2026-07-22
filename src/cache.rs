@@ -54,17 +54,17 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self, lmdb::Error> {
-        let path = path.into();
-
-        let env = Environment::new().set_map_size(MAP_SIZE).open(&path)?;
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, lmdb::Error> {
+        let env = Environment::new()
+            .set_map_size(MAP_SIZE)
+            .open(path.as_ref())?;
         let db = env.create_db(None, DatabaseFlags::empty())?;
 
         Ok(Self { env, db })
     }
 
-    pub fn exists(path: &Path) -> bool {
-        path.join("data.mdb").is_file()
+    pub fn exists(path: impl AsRef<Path>) -> bool {
+        path.as_ref().join("data.mdb").is_file()
     }
 
     pub fn write(&self, words: &[String]) -> Result<(), lmdb::Error> {
