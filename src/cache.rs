@@ -122,7 +122,7 @@ impl Cache {
         Ok(cache_home.join("wordles"))
     }
 
-    pub fn rank(&self, candidates: &HashSet<String>) -> Result<Vec<Ranking>, CacheError> {
+    pub fn rank<'a>(&self, candidates: &'a HashSet<&'a str>) -> Result<Vec<Ranking<'a>>, CacheError> {
         let txn = self.env.begin_ro_txn()?;
         let mut rankings = Vec::new();
 
@@ -133,7 +133,7 @@ impl Cache {
             let mut sum = 0;
 
             for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
-                let key = format!("{word}:{pattern}");
+                let key = format!("{}:{}", word, pattern);
                 let words = from_utf8(txn.get(self.db, &key)?)?;
                 let count = words
                     .split(',')
@@ -149,7 +149,7 @@ impl Cache {
 
             if groups > 0 {
                 rankings.push(Ranking {
-                    word: word.clone(),
+                    word,
                     groups,
                     average: sum as f64 / groups as f64,
                     max,

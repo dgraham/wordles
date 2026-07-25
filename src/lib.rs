@@ -9,39 +9,39 @@ pub const MISS: u16 = 0b00;
 pub const HIT: u16 = 0b01;
 pub const CONTAINS: u16 = 0b10;
 
-pub struct Ranking {
-    pub word: String,
+pub struct Ranking<'a> {
+    pub word: &'a str,
     pub groups: usize,
     pub average: f64,
     pub max: usize,
 }
 
-impl Ord for Ranking {
+impl<'a> Ord for Ranking<'a> {
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .groups
             .cmp(&self.groups)
             .then_with(|| self.average.total_cmp(&other.average))
             .then_with(|| self.max.cmp(&other.max))
-            .then_with(|| self.word.cmp(&other.word))
+            .then_with(|| self.word.cmp(other.word))
     }
 }
 
-impl PartialOrd for Ranking {
+impl<'a> PartialOrd for Ranking<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Ranking {
+impl<'a> PartialEq for Ranking<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for Ranking {}
+impl<'a> Eq for Ranking<'a> {}
 
-impl fmt::Display for Ranking {
+impl<'a> fmt::Display for Ranking<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -65,7 +65,7 @@ pub fn diff(guess: &str, candidate: &str) -> u16 {
     })
 }
 
-pub fn rank(candidates: &HashSet<String>) -> Vec<Ranking> {
+pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
     let mut rankings = Vec::new();
 
     for word in candidates {
@@ -85,7 +85,7 @@ pub fn rank(candidates: &HashSet<String>) -> Vec<Ranking> {
                 .expect("non-empty pattern counts");
             let sum: usize = pattern_counts.values().sum();
             rankings.push(Ranking {
-                word: word.clone(),
+                word,
                 groups,
                 average: sum as f64 / groups as f64,
                 max,
@@ -106,9 +106,9 @@ mod tests {
     #[test]
     fn rank_without_cache_returns_sorted_rankings() {
         let candidates = HashSet::from([
-            "crate".to_string(),
-            "slate".to_string(),
-            "trace".to_string(),
+            "crate",
+            "slate",
+            "trace",
         ]);
 
         assert!(rank(&candidates).is_sorted());
@@ -118,25 +118,25 @@ mod tests {
     fn ranking_order_follows_score_then_word() {
         let mut rankings = vec![
             Ranking {
-                word: "max".to_string(),
+                word: "max",
                 groups: 3,
                 average: 4.0,
                 max: 5,
             },
             Ranking {
-                word: "average".to_string(),
+                word: "average",
                 groups: 3,
                 average: 4.0,
                 max: 10,
             },
             Ranking {
-                word: "groups".to_string(),
+                word: "groups",
                 groups: 4,
                 average: 10.0,
                 max: 10,
             },
             Ranking {
-                word: "alpha".to_string(),
+                word: "alpha",
                 groups: 3,
                 average: 4.0,
                 max: 10,
@@ -145,14 +145,14 @@ mod tests {
 
         rankings.sort();
 
-        let words: Vec<_> = rankings.iter().map(|ranking| &ranking.word).collect();
-        assert_eq!(words, ["groups", "max", "alpha", "average"]);
+        let words: Vec<_> = rankings.iter().map(|ranking| ranking.word).collect();
+        assert_eq!(words, &["groups", "max", "alpha", "average"]);
     }
 
     #[test]
     fn ranking_displays_scores() {
         let ranking = Ranking {
-            word: "slate".to_string(),
+            word: "slate",
             groups: 12,
             average: 1.5,
             max: 3,

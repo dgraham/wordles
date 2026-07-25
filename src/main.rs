@@ -170,7 +170,7 @@ fn print_inline(rankings: &[Ranking]) {
         "{}",
         rankings
             .iter()
-            .map(|ranking| ranking.word.as_str())
+            .map(|ranking| ranking.word)
             .collect::<Vec<_>>()
             .join(" ")
     );
@@ -278,10 +278,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let candidates: HashSet<String> = words
+    let candidates: HashSet<&str> = words
         .iter()
         .filter(|word| rules.matches(word))
-        .cloned()
+        .map(|word| word.as_str())
         .collect();
 
     let rankings = if matches.opt_present("no-cache") {
