@@ -11,7 +11,7 @@ use wordles::cache::Cache;
 use wordles::rule::RuleSet;
 use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank};
 
-const SOLUTIONS: &str = include_str!("../data/words");
+const WORDS: &str = include_str!("../data/words");
 
 #[derive(Debug, Eq, PartialEq)]
 struct CharFreq {
@@ -220,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if matches.opt_present("words") {
-        print!("{SOLUTIONS}");
+        print!("{WORDS}");
         return Ok(());
     }
 
@@ -256,7 +256,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let words = match matches.opt_str("dict") {
         Some(path) => read_words(&read_to_string(path)?),
-        None => read_words(SOLUTIONS),
+        None => read_words(WORDS),
     };
 
     if matches.opt_present("frequency") {
