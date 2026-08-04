@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct CharFreq {
     pub ch: char,
     pub count: usize,
+    pub percentage: f64,
 }
 
 impl Ord for CharFreq {
@@ -13,8 +14,11 @@ impl Ord for CharFreq {
             .count
             .cmp(&self.count)
             .then_with(|| self.ch.cmp(&other.ch))
+            .then_with(|| self.percentage.total_cmp(&other.percentage))
     }
 }
+
+impl Eq for CharFreq {}
 
 impl PartialOrd for CharFreq {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -25,6 +29,7 @@ impl PartialOrd for CharFreq {
 impl CharFreq {
     pub fn frequencies(words: &[String]) -> Vec<Self> {
         let mut counts = HashMap::new();
+        let total = (words.len() * 5) as f64;
 
         for word in words {
             for ch in word.chars() {
@@ -34,7 +39,11 @@ impl CharFreq {
 
         let mut counts = counts
             .into_iter()
-            .map(|(ch, count)| Self { ch, count })
+            .map(|(ch, count)| Self {
+                ch,
+                count,
+                percentage: count as f64 / total,
+            })
             .collect::<Vec<_>>();
         counts.sort();
         counts
@@ -52,8 +61,16 @@ mod tests {
         assert_eq!(
             CharFreq::frequencies(&words),
             vec![
-                CharFreq { ch: 'a', count: 6 },
-                CharFreq { ch: 'b', count: 4 }
+                CharFreq {
+                    ch: 'a',
+                    count: 6,
+                    percentage: 0.6,
+                },
+                CharFreq {
+                    ch: 'b',
+                    count: 4,
+                    percentage: 0.4,
+                }
             ]
         );
     }

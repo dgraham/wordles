@@ -14,19 +14,10 @@ use wordles::{Pattern, Ranking, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
+// TODO The words in data/words are already lowercase, so this copies to Strings unnecessarily.
+// Consider case insensitive comparison instead of converting to lowercase.
 fn read_words(dictionary: &str) -> Vec<String> {
     dictionary.lines().map(str::to_lowercase).collect()
-}
-
-fn print_frequencies(words: &[String]) {
-    let total = (words.len() * 5) as f64;
-    for frequency in CharFreq::frequencies(words) {
-        println!(
-            "{} {}",
-            frequency.ch,
-            frequency.count as f64 / total * 100.0
-        );
-    }
 }
 
 fn print_patterns() {
@@ -162,7 +153,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     if matches.opt_present("frequency") {
-        print_frequencies(&words);
+        for frequency in CharFreq::frequencies(&words) {
+            println!("{} {}", frequency.ch, frequency.percentage * 100.0);
+        }
         return Ok(());
     }
 
