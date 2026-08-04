@@ -64,11 +64,7 @@ pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
         }
 
         let groups = pattern_counts.len();
-        if groups > 0 {
-            let max = *pattern_counts
-                .values()
-                .max()
-                .expect("non-empty pattern counts");
+        if let Some(&max) = pattern_counts.values().max() {
             let sum: usize = pattern_counts.values().sum();
             rankings.push(Ranking {
                 word,
