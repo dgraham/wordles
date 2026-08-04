@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
+use std::process::exit;
 
 use getopts::Options;
 use wordles::cache::Cache;
@@ -189,7 +190,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(m) => m,
         Err(f) => {
             eprintln!("{}", f.to_string());
-            std::process::exit(1);
+            exit(1);
         }
     };
 
@@ -264,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(rules) => rules,
         Err(error) => {
             eprintln!("{error}");
-            std::process::exit(1);
+            exit(1);
         }
     };
 
