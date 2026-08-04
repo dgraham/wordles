@@ -10,7 +10,7 @@ use std::process::exit;
 use getopts::Options;
 use wordles::cache::Cache;
 use wordles::rule::RuleSet;
-use wordles::{CONTAINS, HIT, MISS, Ranking, diff, rank};
+use wordles::{Pattern, Ranking, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
@@ -67,48 +67,15 @@ fn print_frequencies(words: &[String]) {
     }
 }
 
-fn square(value: u16) -> &'static str {
-    match value {
-        MISS => "⬜️",
-        HIT => "🟩",
-        CONTAINS => "🟨",
-        _ => "⬜️",
-    }
-}
-
-fn emoji(pattern: u16) -> String {
-    [8, 6, 4, 2, 0]
-        .iter()
-        .map(|shift| square((pattern >> shift) & 0b11))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn colored_word(word: &str, pattern: u16) -> String {
-    word.chars()
-        .enumerate()
-        .map(|(index, ch)| {
-            let value = (pattern >> (8 - index * 2)) & 0b11;
-            let color = match value {
-                MISS => "\x1b[100;37;1m",
-                HIT => "\x1b[42;30;1m",
-                CONTAINS => "\x1b[43;30;1m",
-                _ => "\x1b[100;37;1m",
-            };
-            format!("{color} {ch} \x1b[0m")
-        })
-        .collect()
-}
-
 fn print_patterns() {
     let words = ["crest", "slate", "audio", "train", "heist", "adore"];
 
     for solution in words {
-        let mut patterns: BTreeMap<u16, Vec<&str>> = BTreeMap::new();
+        let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
 
         for candidate in words {
-            let pattern = diff(candidate, solution);
-            if pattern != 0 {
+            let pattern = Pattern::new(candidate, solution);
+            if !pattern.is_empty() {
                 patterns.entry(pattern).or_default().push(candidate);
             }
         }
@@ -117,10 +84,10 @@ fn print_patterns() {
         for (pattern, candidates) in patterns {
             let words = candidates
                 .iter()
-                .map(|candidate| colored_word(candidate, pattern))
+                .map(|candidate| pattern.highlight(candidate))
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!("{} [{words}]", emoji(pattern));
+            println!("{} [{words}]", pattern.emoji());
         }
         println!();
     }

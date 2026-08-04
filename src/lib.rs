@@ -3,11 +3,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 pub mod cache;
+pub mod pattern;
 pub mod rule;
 
-pub const MISS: u16 = 0b00;
-pub const HIT: u16 = 0b01;
-pub const CONTAINS: u16 = 0b10;
+pub use pattern::Pattern;
 
 pub struct Ranking<'a> {
     pub word: &'a str,
@@ -51,28 +50,14 @@ impl<'a> fmt::Display for Ranking<'a> {
     }
 }
 
-pub fn diff(guess: &str, candidate: &str) -> u16 {
-    guess.chars().enumerate().fold(0, |pattern, (index, ch)| {
-        let value = if candidate.chars().nth(index) == Some(ch) {
-            HIT
-        } else if candidate.contains(ch) {
-            CONTAINS
-        } else {
-            MISS
-        };
-
-        pattern | (value << (8 - index * 2))
-    })
-}
-
 pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
     let mut rankings = Vec::new();
 
     for word in candidates {
         let mut pattern_counts = HashMap::new();
         for candidate in candidates {
-            let pattern = diff(word, candidate);
-            if pattern != 0 {
+            let pattern = Pattern::new(word, candidate);
+            if !pattern.is_empty() {
                 *pattern_counts.entry(pattern).or_insert(0) += 1;
             }
         }
@@ -101,7 +86,7 @@ pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
 mod tests {
     use std::collections::HashSet;
 
-    use super::{CONTAINS, HIT, Ranking, diff, rank};
+    use super::{Ranking, rank};
 
     #[test]
     fn rank_without_cache_returns_sorted_rankings() {
@@ -161,14 +146,4 @@ mod tests {
         assert_eq!(ranking.to_string(), "slate 12 3 1.5");
     }
 
-    #[test]
-    fn diff_encodes_hits_and_misses() {
-        assert_eq!(diff("abcde", "axcye"), 0b01_00_01_00_01);
-    }
-
-    #[test]
-    fn diff_encodes_contained_letters() {
-        assert_eq!(diff("abcde", "ezzzz"), CONTAINS);
-        assert_eq!(diff("abcde", "abcde"), HIT * 0b01_01_01_01_01);
-    }
 }

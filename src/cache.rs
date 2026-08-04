@@ -8,7 +8,7 @@ use std::str::{Utf8Error, from_utf8};
 
 use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
 
-use crate::{Ranking, diff};
+use crate::{Pattern, Ranking};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 
@@ -70,18 +70,18 @@ impl Cache {
     pub fn write(&self, words: &[String]) -> Result<(), lmdb::Error> {
         let mut txn = self.env.begin_rw_txn()?;
         for word in words {
-            let mut patterns: BTreeMap<u16, Vec<&str>> = BTreeMap::new();
+            let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
 
             for candidate in words {
-                let pattern = diff(word, candidate);
-                if pattern != 0 {
+                let pattern = Pattern::new(word, candidate);
+                if !pattern.is_empty() {
                     patterns.entry(pattern).or_default().push(candidate);
                 }
             }
 
             let serialized_pattern_keys = patterns
                 .keys()
-                .map(u16::to_string)
+                .map(Pattern::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
             txn.put(self.db, word, &serialized_pattern_keys, WriteFlags::empty())?;
