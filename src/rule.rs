@@ -71,6 +71,14 @@ impl RuleSet {
     pub fn matches(&self, word: &str) -> bool {
         self.rules.iter().all(|rule| rule.matches(word))
     }
+
+    pub fn filter<'a>(&self, words: &'a [String]) -> HashSet<&'a str> {
+        words
+            .iter()
+            .filter(|word| self.matches(word))
+            .map(String::as_str)
+            .collect()
+    }
 }
 
 #[derive(Default)]
@@ -157,6 +165,8 @@ impl Default for RuleSet {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::{CharPos, Rule, RuleSet};
 
     #[test]
@@ -196,4 +206,17 @@ mod tests {
     fn char_pos_normalizes_uppercase_letters() {
         assert_eq!(CharPos::try_from("S1"), Ok(CharPos { ch: 's', pos: 1 }));
     }
+
+    #[test]
+    fn filter_returns_words_matching_rules() {
+        let words = vec![
+            "slate".to_string(),
+            "crate".to_string(),
+            "caper".to_string(),
+        ];
+        let rules = RuleSet::new().add(Rule::Match('s', 1));
+
+        assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
+    }
 }
+use std::collections::HashSet;

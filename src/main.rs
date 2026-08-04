@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
@@ -269,11 +269,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let candidates: HashSet<&str> = words
-        .iter()
-        .filter(|word| rules.matches(word))
-        .map(|word| word.as_str())
-        .collect();
+    let candidates = rules.filter(&words);
 
     let rankings = if matches.opt_present("no-cache") {
         rank(&candidates)
