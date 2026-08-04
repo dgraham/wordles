@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 pub mod cache;
+pub mod freq;
 pub mod pattern;
 pub mod rule;
 

@@ -1,5 +1,4 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
@@ -9,56 +8,19 @@ use std::process::exit;
 
 use getopts::Options;
 use wordles::cache::Cache;
+use wordles::freq::CharFreq;
 use wordles::rule::RuleSet;
 use wordles::{Pattern, Ranking, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
-#[derive(Debug, Eq, PartialEq)]
-struct CharFreq {
-    ch: char,
-    count: usize,
-}
-
-impl Ord for CharFreq {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other
-            .count
-            .cmp(&self.count)
-            .then_with(|| self.ch.cmp(&other.ch))
-    }
-}
-
-impl PartialOrd for CharFreq {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 fn read_words(dictionary: &str) -> Vec<String> {
     dictionary.lines().map(str::to_lowercase).collect()
 }
 
-fn frequencies(words: &[String]) -> Vec<CharFreq> {
-    let mut counts = HashMap::new();
-
-    for word in words {
-        for ch in word.chars() {
-            *counts.entry(ch).or_insert(0) += 1;
-        }
-    }
-
-    let mut counts: Vec<CharFreq> = counts
-        .into_iter()
-        .map(|(ch, count)| CharFreq { ch, count })
-        .collect();
-    counts.sort();
-    counts
-}
-
 fn print_frequencies(words: &[String]) {
     let total = (words.len() * 5) as f64;
-    for frequency in frequencies(words) {
+    for frequency in CharFreq::frequencies(words) {
         println!(
             "{} {}",
             frequency.ch,
@@ -90,24 +52,6 @@ fn print_patterns() {
             println!("{} [{words}]", pattern.emoji());
         }
         println!();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{CharFreq, frequencies};
-
-    #[test]
-    fn frequencies_returns_counts_in_descending_order() {
-        let words = vec!["aaaaa".to_string(), "bbbba".to_string()];
-
-        assert_eq!(
-            frequencies(&words),
-            vec![
-                CharFreq { ch: 'a', count: 6 },
-                CharFreq { ch: 'b', count: 4 }
-            ]
-        );
     }
 }
 
