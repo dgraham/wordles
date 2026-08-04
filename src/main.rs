@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
@@ -103,27 +103,17 @@ fn print_patterns() {
     let words = ["crest", "slate", "audio", "train", "heist", "adore"];
 
     for solution in words {
-        let mut patterns: HashMap<u16, Vec<&str>> = HashMap::new();
-        let mut pattern_order = Vec::new();
+        let mut patterns: BTreeMap<u16, Vec<&str>> = BTreeMap::new();
 
         for candidate in words {
             let pattern = diff(candidate, solution);
             if pattern != 0 {
-                match patterns.entry(pattern) {
-                    Entry::Occupied(entry) => entry.into_mut().push(candidate),
-                    Entry::Vacant(entry) => {
-                        pattern_order.push(pattern);
-                        entry.insert(vec![candidate]);
-                    }
-                }
+                patterns.entry(pattern).or_default().push(candidate);
             }
         }
 
         println!("{solution}");
-        for pattern in pattern_order {
-            let candidates = patterns
-                .get(&pattern)
-                .expect("pattern order only contains inserted patterns");
+        for (pattern, candidates) in patterns {
             let words = candidates
                 .iter()
                 .map(|candidate| colored_word(candidate, pattern))

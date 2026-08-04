@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::error::Error;
 use std::fmt;
@@ -70,33 +70,23 @@ impl Cache {
     pub fn write(&self, words: &[String]) -> Result<(), lmdb::Error> {
         let mut txn = self.env.begin_rw_txn()?;
         for word in words {
-            let mut patterns: HashMap<u16, Vec<&str>> = HashMap::new();
-            let mut pattern_order = Vec::new();
+            let mut patterns: BTreeMap<u16, Vec<&str>> = BTreeMap::new();
 
             for candidate in words {
                 let pattern = diff(word, candidate);
                 if pattern != 0 {
-                    match patterns.entry(pattern) {
-                        Entry::Occupied(entry) => entry.into_mut().push(candidate),
-                        Entry::Vacant(entry) => {
-                            pattern_order.push(pattern);
-                            entry.insert(vec![candidate]);
-                        }
-                    }
+                    patterns.entry(pattern).or_default().push(candidate);
                 }
             }
 
-            let pattern_keys = pattern_order
-                .iter()
+            let serialized_pattern_keys = patterns
+                .keys()
                 .map(u16::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            txn.put(self.db, word, &pattern_keys, WriteFlags::empty())?;
+            txn.put(self.db, word, &serialized_pattern_keys, WriteFlags::empty())?;
 
-            for pattern in pattern_order {
-                let candidates = patterns
-                    .get(&pattern)
-                    .expect("pattern order only contains inserted patterns");
+            for (pattern, candidates) in patterns {
                 let key = format!("{word}:{pattern}");
                 let value = candidates.join(",");
                 txn.put(self.db, &key, &value, WriteFlags::empty())?;
