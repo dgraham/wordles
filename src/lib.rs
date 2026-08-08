@@ -51,13 +51,13 @@ impl<'a> fmt::Display for Ranking<'a> {
     }
 }
 
-pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
+pub fn rank<'a>(words: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
     let mut rankings = Vec::new();
 
-    for word in candidates {
+    for guess in words {
         let mut pattern_counts = HashMap::new();
-        for candidate in candidates {
-            let pattern = Pattern::new(word, candidate);
+        for solution in words {
+            let pattern = Pattern::new(guess, solution);
             if !pattern.is_empty() {
                 *pattern_counts.entry(pattern).or_insert(0) += 1;
             }
@@ -67,7 +67,7 @@ pub fn rank<'a>(candidates: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
         if let Some(&max) = pattern_counts.values().max() {
             let sum: usize = pattern_counts.values().sum();
             rankings.push(Ranking {
-                word,
+                word: guess,
                 groups,
                 average: sum as f64 / groups as f64,
                 max,
@@ -87,11 +87,7 @@ mod tests {
 
     #[test]
     fn rank_without_cache_returns_sorted_rankings() {
-        let candidates = HashSet::from([
-            "crate",
-            "slate",
-            "trace",
-        ]);
+        let candidates = HashSet::from(["crate", "slate", "trace"]);
 
         assert!(rank(&candidates).is_sorted());
     }
@@ -142,5 +138,4 @@ mod tests {
 
         assert_eq!(ranking.to_string(), "slate 12 3 1.5");
     }
-
 }

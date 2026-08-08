@@ -71,24 +71,23 @@ impl Cache {
         let mut txn = self.env.begin_rw_txn()?;
         for word in words {
             let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
-
-            for candidate in words {
-                let pattern = Pattern::new(word, candidate);
+            for solution in words {
+                let pattern = Pattern::new(word, solution);
                 if !pattern.is_empty() {
-                    patterns.entry(pattern).or_default().push(candidate);
+                    patterns.entry(pattern).or_default().push(solution);
                 }
             }
 
-            let serialized_pattern_keys = patterns
+            let pats = patterns
                 .keys()
                 .map(Pattern::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            txn.put(self.db, word, &serialized_pattern_keys, WriteFlags::empty())?;
+            txn.put(self.db, word, &pats, WriteFlags::empty())?;
 
-            for (pattern, candidates) in patterns {
+            for (pattern, solutions) in patterns {
                 let key = format!("{word}:{pattern}");
-                let value = candidates.join(",");
+                let value = solutions.join(",");
                 txn.put(self.db, &key, &value, WriteFlags::empty())?;
             }
         }
@@ -112,22 +111,22 @@ impl Cache {
         Ok(cache_home.join("wordles"))
     }
 
-    pub fn rank<'a>(&self, candidates: &'a HashSet<&'a str>) -> Result<Vec<Ranking<'a>>, CacheError> {
+    pub fn rank<'a>(&self, words: &'a HashSet<&'a str>) -> Result<Vec<Ranking<'a>>, CacheError> {
         let txn = self.env.begin_ro_txn()?;
         let mut rankings = Vec::new();
 
-        for word in candidates {
-            let patterns = from_utf8(txn.get(self.db, word)?)?;
+        for guess in words {
+            let patterns = from_utf8(txn.get(self.db, guess)?)?;
             let mut groups = 0;
             let mut max = 0;
             let mut sum = 0;
 
             for pattern in patterns.split(',').filter(|pattern| !pattern.is_empty()) {
-                let key = format!("{}:{}", word, pattern);
-                let words = from_utf8(txn.get(self.db, &key)?)?;
-                let count = words
+                let key = format!("{}:{}", guess, pattern);
+                let solutions = from_utf8(txn.get(self.db, &key)?)?;
+                let count = solutions
                     .split(',')
-                    .filter(|candidate| candidates.contains(*candidate))
+                    .filter(|word| words.contains(*word))
                     .count();
 
                 if count > 0 {
@@ -139,7 +138,7 @@ impl Cache {
 
             if groups > 0 {
                 rankings.push(Ranking {
-                    word,
+                    word: guess,
                     groups,
                     average: sum as f64 / groups as f64,
                     max,

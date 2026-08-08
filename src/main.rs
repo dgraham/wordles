@@ -25,22 +25,21 @@ fn print_patterns() {
 
     for solution in words {
         let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
-
-        for candidate in words {
-            let pattern = Pattern::new(candidate, solution);
+        for guess in words {
+            let pattern = Pattern::new(guess, solution);
             if !pattern.is_empty() {
-                patterns.entry(pattern).or_default().push(candidate);
+                patterns.entry(pattern).or_default().push(guess);
             }
         }
 
         println!("{solution}");
-        for (pattern, candidates) in patterns {
-            let words = candidates
+        for (pattern, guesses) in patterns {
+            let highlights = guesses
                 .iter()
-                .map(|candidate| pattern.highlight(candidate))
+                .map(|word| pattern.highlight(word))
                 .collect::<Vec<_>>()
                 .join(", ");
-            println!("{} [{words}]", pattern.emoji());
+            println!("{} [{highlights}]", pattern.emoji());
         }
         println!();
     }

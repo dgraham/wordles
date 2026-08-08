@@ -8,8 +8,8 @@ const CONTAINS: u16 = 0b10;
 pub struct Pattern(u16);
 
 impl Pattern {
-    pub fn new(guess: &str, candidate: &str) -> Self {
-        Self(diff(guess, candidate))
+    pub fn new(guess: &str, solution: &str) -> Self {
+        Self(diff(guess, solution))
     }
 
     pub fn is_empty(self) -> bool {
@@ -57,11 +57,11 @@ impl fmt::Display for Pattern {
     }
 }
 
-fn diff(guess: &str, candidate: &str) -> u16 {
+fn diff(guess: &str, solution: &str) -> u16 {
     guess.chars().enumerate().fold(0, |pattern, (index, ch)| {
-        let value = if candidate.chars().nth(index) == Some(ch) {
+        let value = if solution.chars().nth(index) == Some(ch) {
             HIT
-        } else if candidate.contains(ch) {
+        } else if solution.contains(ch) {
             CONTAINS
         } else {
             MISS
