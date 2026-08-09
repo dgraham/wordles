@@ -27,7 +27,7 @@ impl PartialOrd for CharFreq {
 }
 
 impl CharFreq {
-    pub fn frequencies(words: &[String]) -> Vec<Self> {
+    pub fn frequencies(words: &[&str]) -> Vec<Self> {
         let mut counts = HashMap::new();
         let total = (words.len() * 5) as f64;
 
@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn frequencies_returns_counts_in_descending_order() {
-        let words = vec!["aaaaa".to_string(), "bbbba".to_string()];
+        let words = vec!["aaaaa", "bbbba"];
 
         assert_eq!(
             CharFreq::frequencies(&words),

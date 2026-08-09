@@ -72,11 +72,11 @@ impl RuleSet {
         self.rules.iter().all(|rule| rule.matches(word))
     }
 
-    pub fn filter<'a>(&self, words: &'a [String]) -> HashSet<&'a str> {
+    pub fn filter<'a>(&self, words: &[&'a str]) -> HashSet<&'a str> {
         words
             .iter()
             .filter(|word| self.matches(word))
-            .map(String::as_str)
+            .copied()
             .collect()
     }
 }
@@ -209,11 +209,7 @@ mod tests {
 
     #[test]
     fn filter_returns_words_matching_rules() {
-        let words = vec![
-            "slate".to_string(),
-            "crate".to_string(),
-            "caper".to_string(),
-        ];
+        let words = vec!["slate", "crate", "caper"];
         let rules = RuleSet::new().add(Rule::Match('s', 1));
 
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));

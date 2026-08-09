@@ -67,7 +67,7 @@ impl Cache {
         path.as_ref().join("data.mdb").is_file()
     }
 
-    pub fn write(&self, words: &[String]) -> Result<(), lmdb::Error> {
+    pub fn write(&self, words: &[&str]) -> Result<(), lmdb::Error> {
         let mut txn = self.env.begin_rw_txn()?;
         for word in words {
             let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();

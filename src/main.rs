@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
@@ -13,12 +14,6 @@ use wordles::rule::RuleSet;
 use wordles::{Pattern, Ranking, rank};
 
 const WORDS: &str = include_str!("../data/words");
-
-// TODO The words in data/words are already lowercase, so this copies to Strings unnecessarily.
-// Consider case insensitive comparison instead of converting to lowercase.
-fn read_words(dictionary: &str) -> Vec<String> {
-    dictionary.lines().map(str::to_lowercase).collect()
-}
 
 fn print_patterns() {
     let words = ["crest", "slate", "audio", "train", "heist", "adore"];
@@ -146,10 +141,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
     };
 
-    let words = match matches.opt_str("dict") {
-        Some(path) => read_words(&read_to_string(path)?),
-        None => read_words(WORDS),
+    let dictionary = match matches.opt_str("dict") {
+        Some(path) => Cow::Owned(read_to_string(path)?.to_lowercase()),
+        None => Cow::Borrowed(WORDS),
     };
+    let words: Vec<&str> = dictionary.lines().collect();
 
     if matches.opt_present("frequency") {
         for frequency in CharFreq::frequencies(&words) {
