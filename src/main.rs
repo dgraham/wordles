@@ -8,10 +8,7 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use getopts::Options;
-use wordles::cache::Cache;
-use wordles::freq::CharFreq;
-use wordles::rule::RuleSet;
-use wordles::{Pattern, Ranking, rank};
+use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
