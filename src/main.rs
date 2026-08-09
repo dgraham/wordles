@@ -41,7 +41,7 @@ fn print_verbose(rankings: &[Ranking]) {
     let output = rankings
         .into_iter()
         .rev()
-        .map(|ranking| ranking.to_string())
+        .map(Ranking::to_string)
         .collect::<Vec<_>>()
         .join("\n");
     if !output.is_empty() {
