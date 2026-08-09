@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt;
 
 pub mod cache;
@@ -51,8 +51,60 @@ impl<'a> fmt::Display for Ranking<'a> {
     }
 }
 
-pub fn rank<'a>(words: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
-    let mut rankings = Vec::new();
+enum RankingStorage<'a> {
+    All(Vec<Ranking<'a>>),
+    TopK {
+        rankings: BinaryHeap<Ranking<'a>>,
+        k: usize,
+    },
+}
+
+pub struct Rankings<'a> {
+    storage: RankingStorage<'a>,
+}
+
+impl<'a> Rankings<'a> {
+    pub fn new(limit: Option<usize>) -> Self {
+        let storage = match limit {
+            Some(limit) => RankingStorage::TopK {
+                rankings: BinaryHeap::with_capacity(limit),
+                k: limit,
+            },
+            None => RankingStorage::All(Vec::new()),
+        };
+
+        Self { storage }
+    }
+
+    pub fn push(&mut self, ranking: Ranking<'a>) {
+        match &mut self.storage {
+            RankingStorage::All(rankings) => rankings.push(ranking),
+            RankingStorage::TopK { rankings, k } => {
+                if rankings.len() < *k {
+                    rankings.push(ranking);
+                } else if let Some(worst) = rankings.peek()
+                    && ranking.cmp(worst) == Ordering::Less
+                {
+                    rankings.pop();
+                    rankings.push(ranking);
+                }
+            }
+        }
+    }
+
+    pub fn into_sorted_vec(self) -> Vec<Ranking<'a>> {
+        match self.storage {
+            RankingStorage::All(mut rankings) => {
+                rankings.sort();
+                rankings
+            }
+            RankingStorage::TopK { rankings, .. } => rankings.into_sorted_vec(),
+        }
+    }
+}
+
+pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'a>> {
+    let mut rankings = Rankings::new(limit);
 
     for guess in words {
         let mut pattern_counts = HashMap::new();
@@ -75,21 +127,20 @@ pub fn rank<'a>(words: &HashSet<&'a str>) -> Vec<Ranking<'a>> {
         }
     }
 
-    rankings.sort();
-    rankings
+    rankings.into_sorted_vec()
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
-    use super::{Ranking, rank};
+    use super::{Ranking, Rankings, rank};
 
     #[test]
     fn rank_without_cache_returns_sorted_rankings() {
         let candidates = HashSet::from(["crate", "slate", "trace"]);
 
-        assert!(rank(&candidates).is_sorted());
+        assert!(rank(&candidates, None).is_sorted());
     }
 
     #[test]
@@ -137,5 +188,46 @@ mod tests {
         };
 
         assert_eq!(ranking.to_string(), "slate 12 3 1.5");
+    }
+
+    #[test]
+    fn limited_rankings_retain_the_best_scores() {
+        let mut rankings = Rankings::new(Some(2));
+
+        for ranking in [
+            Ranking {
+                word: "max",
+                groups: 3,
+                average: 4.0,
+                max: 5,
+            },
+            Ranking {
+                word: "average",
+                groups: 3,
+                average: 4.0,
+                max: 10,
+            },
+            Ranking {
+                word: "groups",
+                groups: 4,
+                average: 10.0,
+                max: 10,
+            },
+            Ranking {
+                word: "alpha",
+                groups: 3,
+                average: 4.0,
+                max: 10,
+            },
+        ] {
+            rankings.push(ranking);
+        }
+
+        let words: Vec<_> = rankings
+            .into_sorted_vec()
+            .into_iter()
+            .map(|ranking| ranking.word)
+            .collect();
+        assert_eq!(words, ["groups", "max"]);
     }
 }

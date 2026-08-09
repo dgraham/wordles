@@ -8,7 +8,7 @@ use std::str::{Utf8Error, from_utf8};
 
 use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
 
-use crate::{Pattern, Ranking};
+use crate::{Pattern, Ranking, Rankings};
 
 const MAP_SIZE: usize = 64 * 1024 * 1024;
 
@@ -111,9 +111,13 @@ impl Cache {
         Ok(cache_home.join("wordles"))
     }
 
-    pub fn rank<'a>(&self, words: &'a HashSet<&'a str>) -> Result<Vec<Ranking<'a>>, CacheError> {
+    pub fn rank<'a>(
+        &self,
+        words: &'a HashSet<&'a str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Ranking<'a>>, CacheError> {
         let txn = self.env.begin_ro_txn()?;
-        let mut rankings = Vec::new();
+        let mut rankings = Rankings::new(limit);
 
         for guess in words {
             let patterns = from_utf8(txn.get(self.db, guess)?)?;
@@ -146,7 +150,6 @@ impl Cache {
             }
         }
 
-        rankings.sort();
-        Ok(rankings)
+        Ok(rankings.into_sorted_vec())
     }
 }

@@ -171,7 +171,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let candidates = rules.filter(&words);
 
     let rankings = if matches.opt_present("no-cache") {
-        rank(&candidates)
+        rank(&candidates, limit)
     } else {
         let path = matches
             .opt_str("cache")
@@ -183,12 +183,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if needs_write {
             cache.write(&words)?;
         }
-        cache.rank(&candidates)?
-    };
-
-    let rankings = match limit {
-        Some(limit) => rankings.into_iter().take(limit).collect(),
-        None => rankings,
+        cache.rank(&candidates, limit)?
     };
 
     if matches.opt_present("verbose") {
