@@ -144,7 +144,7 @@ impl Cache {
                 rankings.push(Ranking {
                     word: guess,
                     groups,
-                    average: sum as f64 / groups as f64,
+                    avg: sum as f64 / groups as f64,
                     max,
                 });
             }

@@ -7,7 +7,7 @@ use crate::Pattern;
 pub struct Ranking<'a> {
     pub word: &'a str,
     pub groups: usize,
-    pub average: f64,
+    pub avg: f64,
     pub max: usize,
 }
 
@@ -16,7 +16,7 @@ impl<'a> Ord for Ranking<'a> {
         other
             .groups
             .cmp(&self.groups)
-            .then_with(|| self.average.total_cmp(&other.average))
+            .then_with(|| self.avg.total_cmp(&other.avg))
             .then_with(|| self.max.cmp(&other.max))
             .then_with(|| self.word.cmp(other.word))
     }
@@ -38,11 +38,7 @@ impl<'a> Eq for Ranking<'a> {}
 
 impl<'a> fmt::Display for Ranking<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} {}",
-            self.word, self.groups, self.max, self.average
-        )
+        write!(f, "{} {} {} {}", self.word, self.groups, self.max, self.avg)
     }
 }
 
@@ -116,7 +112,7 @@ pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'
             rankings.push(Ranking {
                 word: guess,
                 groups,
-                average: sum as f64 / groups as f64,
+                avg: sum as f64 / groups as f64,
                 max,
             });
         }
@@ -144,25 +140,25 @@ mod tests {
             Ranking {
                 word: "max",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 5,
             },
             Ranking {
                 word: "average",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 10,
             },
             Ranking {
                 word: "groups",
                 groups: 4,
-                average: 10.0,
+                avg: 10.0,
                 max: 10,
             },
             Ranking {
                 word: "alpha",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 10,
             },
         ];
@@ -178,7 +174,7 @@ mod tests {
         let ranking = Ranking {
             word: "slate",
             groups: 12,
-            average: 1.5,
+            avg: 1.5,
             max: 3,
         };
 
@@ -193,25 +189,25 @@ mod tests {
             Ranking {
                 word: "max",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 5,
             },
             Ranking {
                 word: "average",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 10,
             },
             Ranking {
                 word: "groups",
                 groups: 4,
-                average: 10.0,
+                avg: 10.0,
                 max: 10,
             },
             Ranking {
                 word: "alpha",
                 groups: 3,
-                average: 4.0,
+                avg: 4.0,
                 max: 10,
             },
         ] {
