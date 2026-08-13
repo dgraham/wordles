@@ -102,7 +102,7 @@ pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'
         for solution in words {
             let pattern = Pattern::new(guess, solution);
             if !pattern.is_empty() {
-                *pattern_counts.entry(pattern).or_insert(0) += 1;
+                *pattern_counts.entry(pattern).or_default() += 1;
             }
         }
 

@@ -33,7 +33,7 @@ impl CharFreq {
 
         for word in words {
             for ch in word.chars() {
-                *counts.entry(ch).or_insert(0) += 1;
+                *counts.entry(ch).or_default() += 1;
             }
         }
 
