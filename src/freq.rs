@@ -27,9 +27,17 @@ impl PartialOrd for CharFreq {
 }
 
 impl CharFreq {
+    pub fn new(ch: char, count: usize, total: usize) -> Self {
+        Self {
+            ch,
+            count,
+            percentage: count as f64 / total as f64,
+        }
+    }
+
     pub fn frequencies(words: &[&str]) -> Vec<Self> {
         let mut counts = HashMap::new();
-        let total = (words.len() * 5) as f64;
+        let total = words.len() * 5;
 
         for word in words {
             for ch in word.chars() {
@@ -39,11 +47,7 @@ impl CharFreq {
 
         let mut counts = counts
             .into_iter()
-            .map(|(ch, count)| Self {
-                ch,
-                count,
-                percentage: count as f64 / total,
-            })
+            .map(|(ch, count)| Self::new(ch, count, total))
             .collect::<Vec<_>>();
         counts.sort();
         counts
@@ -60,18 +64,7 @@ mod tests {
 
         assert_eq!(
             CharFreq::frequencies(&words),
-            vec![
-                CharFreq {
-                    ch: 'a',
-                    count: 6,
-                    percentage: 0.6,
-                },
-                CharFreq {
-                    ch: 'b',
-                    count: 4,
-                    percentage: 0.4,
-                }
-            ]
+            vec![CharFreq::new('a', 6, 10), CharFreq::new('b', 4, 10),]
         );
     }
 }
