@@ -94,6 +94,22 @@ impl<'a> Rankings<'a> {
     }
 }
 
+impl<'a> Extend<Ranking<'a>> for Rankings<'a> {
+    fn extend<T: IntoIterator<Item = Ranking<'a>>>(&mut self, rankings: T) {
+        for ranking in rankings {
+            self.push(ranking);
+        }
+    }
+}
+
+impl<'a> FromIterator<Ranking<'a>> for Rankings<'a> {
+    fn from_iter<T: IntoIterator<Item = Ranking<'a>>>(rankings: T) -> Self {
+        let mut result = Self::new(None);
+        result.extend(rankings);
+        result
+    }
+}
+
 pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'a>> {
     let mut rankings = Rankings::new(limit);
 
@@ -185,7 +201,7 @@ mod tests {
     fn limited_rankings_retain_the_best_scores() {
         let mut rankings = Rankings::new(Some(2));
 
-        for ranking in [
+        rankings.extend([
             Ranking {
                 word: "max",
                 groups: 3,
@@ -210,9 +226,7 @@ mod tests {
                 avg: 4.0,
                 max: 10,
             },
-        ] {
-            rankings.push(ranking);
-        }
+        ]);
 
         let words: Vec<_> = rankings
             .into_sorted_vec()
@@ -220,5 +234,32 @@ mod tests {
             .map(|ranking| ranking.word)
             .collect();
         assert_eq!(words, ["groups", "max"]);
+    }
+
+    #[test]
+    fn rankings_collect_all_rankings() {
+        let rankings: Rankings = [
+            Ranking {
+                word: "worse",
+                groups: 2,
+                avg: 2.0,
+                max: 2,
+            },
+            Ranking {
+                word: "best",
+                groups: 3,
+                avg: 1.0,
+                max: 1,
+            },
+        ]
+        .into_iter()
+        .collect();
+
+        let words: Vec<_> = rankings
+            .into_sorted_vec()
+            .into_iter()
+            .map(|ranking| ranking.word)
+            .collect();
+        assert_eq!(words, ["best", "worse"]);
     }
 }

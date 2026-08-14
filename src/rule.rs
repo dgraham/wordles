@@ -56,9 +56,8 @@ impl RuleSet {
         RuleSetBuilder::default()
     }
 
-    pub fn push(mut self, rule: Rule) -> Self {
+    pub fn push(&mut self, rule: Rule) {
         self.rules.push(rule);
-        self
     }
 
     pub fn matches(&self, word: &str) -> bool {
@@ -71,6 +70,20 @@ impl RuleSet {
             .filter(|word| self.matches(word))
             .copied()
             .collect()
+    }
+}
+
+impl Extend<Rule> for RuleSet {
+    fn extend<T: IntoIterator<Item = Rule>>(&mut self, rules: T) {
+        self.rules.extend(rules);
+    }
+}
+
+impl FromIterator<Rule> for RuleSet {
+    fn from_iter<T: IntoIterator<Item = Rule>>(rules: T) -> Self {
+        let mut set = Self::new();
+        set.extend(rules);
+        set
     }
 }
 
@@ -107,43 +120,43 @@ impl RuleSetBuilder {
         let mut rules = RuleSet::new();
 
         for value in self.match_values {
-            for CharPos { ch, pos } in value
-                .split(',')
-                .map(CharPos::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("Error parsing match: {error}"))?
-            {
-                rules = rules.push(Rule::Match(ch, pos));
-            }
+            rules.extend(
+                value
+                    .split(',')
+                    .map(CharPos::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("Error parsing match: {error}"))?
+                    .into_iter()
+                    .map(|CharPos { ch, pos }| Rule::Match(ch, pos)),
+            );
         }
 
         for value in self.contains_values {
-            for CharPos { ch, pos } in value
-                .split(',')
-                .map(CharPos::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("Error parsing contains: {error}"))?
-            {
-                rules = rules.push(Rule::Contains(ch, pos));
-            }
+            rules.extend(
+                value
+                    .split(',')
+                    .map(CharPos::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("Error parsing contains: {error}"))?
+                    .into_iter()
+                    .map(|CharPos { ch, pos }| Rule::Contains(ch, pos)),
+            );
         }
 
         for value in self.none_values {
-            for ch in value
-                .split(',')
-                .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            {
-                rules = rules.push(Rule::None(ch));
-            }
+            rules.extend(value.split(',').filter_map(|s| {
+                s.chars()
+                    .next()
+                    .map(|ch| Rule::None(ch.to_ascii_lowercase()))
+            }));
         }
 
         for value in self.once_values {
-            for ch in value
-                .split(',')
-                .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
-            {
-                rules = rules.push(Rule::Once(ch));
-            }
+            rules.extend(value.split(',').filter_map(|s| {
+                s.chars()
+                    .next()
+                    .map(|ch| Rule::Once(ch.to_ascii_lowercase()))
+            }));
         }
 
         Ok(rules)
@@ -170,12 +183,12 @@ mod tests {
 
     #[test]
     fn ruleset_pushes_single_rules() {
-        let rules = RuleSet::new()
-            .push(Rule::Match('s', 1))
-            .push(Rule::Contains('l', 3))
-            .push(Rule::None('r'))
-            .push(Rule::None('n'))
-            .push(Rule::Once('e'));
+        let mut rules = RuleSet::new();
+        rules.push(Rule::Match('s', 1));
+        rules.push(Rule::Contains('l', 3));
+        rules.push(Rule::None('r'));
+        rules.push(Rule::None('n'));
+        rules.push(Rule::Once('e'));
 
         assert!(rules.matches("slate"));
         assert!(!rules.matches("spate"));
@@ -203,7 +216,7 @@ mod tests {
     #[test]
     fn filter_returns_words_matching_rules() {
         let words = vec!["slate", "crate", "caper"];
-        let rules = RuleSet::new().push(Rule::Match('s', 1));
+        let rules: RuleSet = [Rule::Match('s', 1)].into_iter().collect();
 
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
     }
