@@ -9,16 +9,9 @@ pub enum Rule {
 impl Rule {
     pub fn matches(&self, word: &str) -> bool {
         match *self {
-            Rule::Match(ch, pos) => word
-                .chars()
-                .nth((pos - 1) as usize)
-                .map_or(false, |c| c == ch),
+            Rule::Match(ch, pos) => word.chars().nth((pos - 1) as usize) == Some(ch),
             Rule::Contains(ch, pos) => {
-                word.contains(ch)
-                    && !word
-                        .chars()
-                        .nth((pos - 1) as usize)
-                        .map_or(false, |c| c == ch)
+                word.contains(ch) && !(word.chars().nth((pos - 1) as usize) == Some(ch))
             }
             Rule::None(ch) => !word.contains(ch),
             Rule::Once(ch) => word.chars().filter(|&c| c == ch).count() == 1,
@@ -63,7 +56,7 @@ impl RuleSet {
         RuleSetBuilder::default()
     }
 
-    pub fn add(mut self, rule: Rule) -> Self {
+    pub fn push(mut self, rule: Rule) -> Self {
         self.rules.push(rule);
         self
     }
@@ -120,7 +113,7 @@ impl RuleSetBuilder {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| format!("Error parsing match: {error}"))?
             {
-                rules = rules.add(Rule::Match(ch, pos));
+                rules = rules.push(Rule::Match(ch, pos));
             }
         }
 
@@ -131,7 +124,7 @@ impl RuleSetBuilder {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| format!("Error parsing contains: {error}"))?
             {
-                rules = rules.add(Rule::Contains(ch, pos));
+                rules = rules.push(Rule::Contains(ch, pos));
             }
         }
 
@@ -140,7 +133,7 @@ impl RuleSetBuilder {
                 .split(',')
                 .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
             {
-                rules = rules.add(Rule::None(ch));
+                rules = rules.push(Rule::None(ch));
             }
         }
 
@@ -149,7 +142,7 @@ impl RuleSetBuilder {
                 .split(',')
                 .filter_map(|s| s.chars().next().map(|ch| ch.to_ascii_lowercase()))
             {
-                rules = rules.add(Rule::Once(ch));
+                rules = rules.push(Rule::Once(ch));
             }
         }
 
@@ -176,13 +169,13 @@ mod tests {
     }
 
     #[test]
-    fn ruleset_adds_single_rules() {
+    fn ruleset_pushes_single_rules() {
         let rules = RuleSet::new()
-            .add(Rule::Match('s', 1))
-            .add(Rule::Contains('l', 3))
-            .add(Rule::None('r'))
-            .add(Rule::None('n'))
-            .add(Rule::Once('e'));
+            .push(Rule::Match('s', 1))
+            .push(Rule::Contains('l', 3))
+            .push(Rule::None('r'))
+            .push(Rule::None('n'))
+            .push(Rule::Once('e'));
 
         assert!(rules.matches("slate"));
         assert!(!rules.matches("spate"));
@@ -210,7 +203,7 @@ mod tests {
     #[test]
     fn filter_returns_words_matching_rules() {
         let words = vec!["slate", "crate", "caper"];
-        let rules = RuleSet::new().add(Rule::Match('s', 1));
+        let rules = RuleSet::new().push(Rule::Match('s', 1));
 
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
     }

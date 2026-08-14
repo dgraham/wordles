@@ -39,7 +39,7 @@ fn print_patterns() {
 
 fn print_verbose(rankings: &[Ranking]) {
     let output = rankings
-        .into_iter()
+        .iter()
         .rev()
         .map(Ranking::to_string)
         .collect::<Vec<_>>()
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            eprintln!("{}", f.to_string());
+            eprintln!("{}", f);
             exit(1);
         }
     };
