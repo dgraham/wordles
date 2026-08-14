@@ -12,54 +12,6 @@ use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
-fn print_patterns() {
-    let words = ["crest", "slate", "audio", "train", "heist", "adore"];
-
-    for solution in words {
-        let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
-        for guess in words {
-            let pattern = Pattern::new(guess, solution);
-            if !pattern.is_empty() {
-                patterns.entry(pattern).or_default().push(guess);
-            }
-        }
-
-        println!("{solution}");
-        for (pattern, guesses) in patterns {
-            let highlights = guesses
-                .iter()
-                .map(|word| pattern.highlight(word))
-                .collect::<Vec<_>>()
-                .join(", ");
-            println!("{} [{highlights}]", pattern.emoji());
-        }
-        println!();
-    }
-}
-
-fn print_verbose(rankings: &[Ranking]) {
-    let output = rankings
-        .iter()
-        .rev()
-        .map(Ranking::to_string)
-        .collect::<Vec<_>>()
-        .join("\n");
-    if !output.is_empty() {
-        println!("{output}");
-    }
-}
-
-fn print_inline(rankings: &[Ranking]) {
-    println!(
-        "{}",
-        rankings
-            .iter()
-            .map(|ranking| ranking.word)
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let mut opts = Options::new();
@@ -190,4 +142,52 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn print_patterns() {
+    let words = ["crest", "slate", "audio", "train", "heist", "adore"];
+
+    for solution in words {
+        let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
+        for guess in words {
+            let pattern = Pattern::new(guess, solution);
+            if !pattern.is_empty() {
+                patterns.entry(pattern).or_default().push(guess);
+            }
+        }
+
+        println!("{solution}");
+        for (pattern, guesses) in patterns {
+            let highlights = guesses
+                .iter()
+                .map(|word| pattern.highlight(word))
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!("{} [{highlights}]", pattern.emoji());
+        }
+        println!();
+    }
+}
+
+fn print_verbose(rankings: &[Ranking]) {
+    let output = rankings
+        .iter()
+        .rev()
+        .map(Ranking::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !output.is_empty() {
+        println!("{output}");
+    }
+}
+
+fn print_inline(rankings: &[Ranking]) {
+    println!(
+        "{}",
+        rankings
+            .iter()
+            .map(|ranking| ranking.word)
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
 }
