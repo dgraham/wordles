@@ -53,7 +53,7 @@ impl RuleSet {
     }
 
     pub fn builder() -> RuleSetBuilder {
-        RuleSetBuilder::default()
+        RuleSetBuilder::new()
     }
 
     pub fn push(&mut self, rule: Rule) {
@@ -87,83 +87,83 @@ impl FromIterator<Rule> for RuleSet {
     }
 }
 
-#[derive(Default)]
 pub struct RuleSetBuilder {
-    match_values: Vec<String>,
-    contains_values: Vec<String>,
-    none_values: Vec<String>,
-    once_values: Vec<String>,
+    result: Result<RuleSet, String>,
 }
 
 impl RuleSetBuilder {
-    pub fn matches(mut self, values: Vec<String>) -> Self {
-        self.match_values = values;
-        self
+    pub fn new() -> Self {
+        Self {
+            result: Ok(RuleSet::new()),
+        }
     }
 
-    pub fn contains(mut self, values: Vec<String>) -> Self {
-        self.contains_values = values;
-        self
+    pub fn matches(self, values: &[impl AsRef<str>]) -> Self {
+        self.position_rules(values, Rule::Match)
     }
 
-    pub fn none(mut self, values: Vec<String>) -> Self {
-        self.none_values = values;
-        self
+    pub fn contains(self, values: &[impl AsRef<str>]) -> Self {
+        self.position_rules(values, Rule::Contains)
     }
 
-    pub fn once(mut self, values: Vec<String>) -> Self {
-        self.once_values = values;
-        self
+    pub fn none(self, values: &[impl AsRef<str>]) -> Self {
+        self.character_rules(values, Rule::None)
+    }
+
+    pub fn once(self, values: &[impl AsRef<str>]) -> Self {
+        self.character_rules(values, Rule::Once)
     }
 
     pub fn build(self) -> Result<RuleSet, String> {
-        let mut rules = RuleSet::new();
+        self.result
+    }
 
-        for value in self.match_values {
-            rules.extend(
-                value
+    fn position_rules(mut self, values: &[impl AsRef<str>], rule: fn(char, u8) -> Rule) -> Self {
+        self.result = self.result.and_then(|mut rules| {
+            for value in values {
+                let positions = value
+                    .as_ref()
                     .split(',')
                     .map(CharPos::try_from)
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| format!("Error parsing match: {error}"))?
-                    .into_iter()
-                    .map(|CharPos { ch, pos }| Rule::Match(ch, pos)),
-            );
-        }
+                    .map_err(|error| format!("Error parsing rule: {error}"))?;
+                rules.extend(
+                    positions
+                        .into_iter()
+                        .map(|CharPos { ch, pos }| rule(ch, pos)),
+                );
+            }
+            Ok(rules)
+        });
 
-        for value in self.contains_values {
-            rules.extend(
-                value
-                    .split(',')
-                    .map(CharPos::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| format!("Error parsing contains: {error}"))?
-                    .into_iter()
-                    .map(|CharPos { ch, pos }| Rule::Contains(ch, pos)),
-            );
-        }
+        self
+    }
 
-        for value in self.none_values {
-            rules.extend(value.split(',').filter_map(|s| {
-                s.chars()
-                    .next()
-                    .map(|ch| Rule::None(ch.to_ascii_lowercase()))
-            }));
-        }
+    fn character_rules(mut self, values: &[impl AsRef<str>], rule: fn(char) -> Rule) -> Self {
+        self.result = self.result.map(|mut rules| {
+            for value in values {
+                rules.extend(
+                    value
+                        .as_ref()
+                        .split(',')
+                        .filter_map(|value| value.chars().next())
+                        .map(|ch| rule(ch.to_ascii_lowercase())),
+                );
+            }
+            rules
+        });
 
-        for value in self.once_values {
-            rules.extend(value.split(',').filter_map(|s| {
-                s.chars()
-                    .next()
-                    .map(|ch| Rule::Once(ch.to_ascii_lowercase()))
-            }));
-        }
-
-        Ok(rules)
+        self
     }
 }
 
 impl Default for RuleSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for RuleSetBuilder {
     fn default() -> Self {
         Self::new()
     }
@@ -197,10 +197,10 @@ mod tests {
     #[test]
     fn builder_creates_ruleset() {
         let rules = RuleSet::builder()
-            .matches(vec!["S1".to_string()])
-            .contains(vec!["L3".to_string()])
-            .none(vec!["R,N".to_string()])
-            .once(vec!["E".to_string()])
+            .matches(&["S1"])
+            .contains(&["L3"])
+            .none(&["R,N"])
+            .once(&["E"])
             .build()
             .unwrap();
 

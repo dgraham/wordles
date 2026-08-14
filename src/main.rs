@@ -104,10 +104,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let rules = match RuleSet::builder()
-        .matches(matches.opt_strs("match"))
-        .contains(matches.opt_strs("contains"))
-        .none(matches.opt_strs("none"))
-        .once(matches.opt_strs("once"))
+        .matches(&matches.opt_strs("match"))
+        .contains(&matches.opt_strs("contains"))
+        .none(&matches.opt_strs("none"))
+        .once(&matches.opt_strs("once"))
         .build()
     {
         Ok(rules) => rules,
