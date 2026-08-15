@@ -151,14 +151,10 @@ impl RuleSetBuilder {
                 let positions = value
                     .as_ref()
                     .split(',')
-                    .map(CharPos::try_from)
+                    .map(|value| CharPos::try_from(value).map(|CharPos { ch, pos }| rule(ch, pos)))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|error| RuleError::new(format!("Error parsing rule: {error}")))?;
-                rules.extend(
-                    positions
-                        .into_iter()
-                        .map(|CharPos { ch, pos }| rule(ch, pos)),
-                );
+                rules.extend(positions);
             }
             Ok(rules)
         });
