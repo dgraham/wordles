@@ -148,12 +148,10 @@ impl RuleSetBuilder {
     fn position_rules(mut self, values: &[impl AsRef<str>], rule: fn(char, u8) -> Rule) -> Self {
         self.result = self.result.and_then(|mut rules| {
             for value in values {
-                let positions = value
-                    .as_ref()
-                    .split(',')
-                    .map(|value| CharPos::try_from(value).map(|CharPos { ch, pos }| rule(ch, pos)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                rules.extend(positions);
+                for value in value.as_ref().split(',') {
+                    let rule = CharPos::try_from(value).map(|CharPos { ch, pos }| rule(ch, pos))?;
+                    rules.push(rule);
+                }
             }
             Ok(rules)
         });
@@ -190,6 +188,7 @@ impl Default for RuleSetBuilder {
         Self::new()
     }
 }
+use std::collections::HashSet;
 
 #[cfg(test)]
 mod tests {
@@ -255,4 +254,3 @@ mod tests {
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
     }
 }
-use std::collections::HashSet;

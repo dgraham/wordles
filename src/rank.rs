@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn ranking_order_follows_score_then_word() {
-        let mut rankings = vec![
+        let mut rankings = [
             Ranking {
                 word: "max",
                 groups: 3,
