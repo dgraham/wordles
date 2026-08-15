@@ -152,8 +152,7 @@ impl RuleSetBuilder {
                     .as_ref()
                     .split(',')
                     .map(|value| CharPos::try_from(value).map(|CharPos { ch, pos }| rule(ch, pos)))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| RuleError::new(format!("Error parsing rule: {error}")))?;
+                    .collect::<Result<Vec<_>, _>>()?;
                 rules.extend(positions);
             }
             Ok(rules)
