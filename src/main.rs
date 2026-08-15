@@ -5,13 +5,24 @@ use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use getopts::Options;
 use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
     let args = args()?;
     let opts = opts();
     let matches = opts.parse(&args[1..])?;
