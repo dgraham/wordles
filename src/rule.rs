@@ -1,3 +1,27 @@
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RuleError {
+    message: String,
+}
+
+impl RuleError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for RuleError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl Error for RuleError {}
+
 #[derive(Debug)]
 pub enum Rule {
     Contains(char, u8),
@@ -26,18 +50,21 @@ struct CharPos {
 }
 
 impl TryFrom<&str> for CharPos {
-    type Error = String;
+    type Error = RuleError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut chars = value.chars();
         let ch = chars
             .next()
-            .ok_or_else(|| format!("Invalid entry '{}'", value))?
+            .ok_or_else(|| RuleError::new(format!("Invalid entry '{value}'")))?
             .to_ascii_lowercase();
         let pos = chars
             .as_str()
             .parse()
-            .map_err(|_| format!("Invalid number in '{}'", value))?;
+            .map_err(|_| RuleError::new(format!("Invalid number in '{value}'")))?;
+        if !(1..=5).contains(&pos) {
+            return Err(RuleError::new(format!("Invalid position in '{value}'")));
+        }
 
         Ok(Self { ch, pos })
     }
@@ -88,7 +115,7 @@ impl FromIterator<Rule> for RuleSet {
 }
 
 pub struct RuleSetBuilder {
-    result: Result<RuleSet, String>,
+    result: Result<RuleSet, RuleError>,
 }
 
 impl RuleSetBuilder {
@@ -114,7 +141,7 @@ impl RuleSetBuilder {
         self.character_rules(values, Rule::Once)
     }
 
-    pub fn build(self) -> Result<RuleSet, String> {
+    pub fn build(self) -> Result<RuleSet, RuleError> {
         self.result
     }
 
@@ -126,7 +153,7 @@ impl RuleSetBuilder {
                     .split(',')
                     .map(CharPos::try_from)
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| format!("Error parsing rule: {error}"))?;
+                    .map_err(|error| RuleError::new(format!("Error parsing rule: {error}")))?;
                 rules.extend(
                     positions
                         .into_iter()
@@ -173,7 +200,7 @@ impl Default for RuleSetBuilder {
 mod tests {
     use std::collections::HashSet;
 
-    use super::{CharPos, Rule, RuleSet};
+    use super::{CharPos, Rule, RuleError, RuleSet};
 
     #[test]
     fn empty_rulesets_match_every_word() {
@@ -211,6 +238,18 @@ mod tests {
     #[test]
     fn char_pos_normalizes_uppercase_letters() {
         assert_eq!(CharPos::try_from("S1"), Ok(CharPos { ch: 's', pos: 1 }));
+    }
+
+    #[test]
+    fn char_pos_rejects_positions_outside_word_bounds() {
+        assert_eq!(
+            CharPos::try_from("S0"),
+            Err(RuleError::new("Invalid position in 'S0'"))
+        );
+        assert_eq!(
+            CharPos::try_from("S6"),
+            Err(RuleError::new("Invalid position in 'S6'"))
+        );
     }
 
     #[test]

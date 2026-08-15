@@ -58,17 +58,21 @@ impl fmt::Display for Pattern {
 }
 
 fn diff(guess: &str, solution: &str) -> u16 {
-    guess.chars().enumerate().fold(0, |pattern, (index, ch)| {
-        let value = if solution.chars().nth(index) == Some(ch) {
-            HIT
-        } else if solution.contains(ch) {
-            CONTAINS
-        } else {
-            MISS
-        };
+    guess
+        .chars()
+        .take(5)
+        .enumerate()
+        .fold(0, |pattern, (index, ch)| {
+            let value = if solution.chars().nth(index) == Some(ch) {
+                HIT
+            } else if solution.contains(ch) {
+                CONTAINS
+            } else {
+                MISS
+            };
 
-        pattern | (value << (8 - index * 2))
-    })
+            pattern | (value << (8 - index * 2))
+        })
 }
 
 fn square(value: u16) -> &'static str {
@@ -99,6 +103,14 @@ mod tests {
         );
         assert_eq!(
             Pattern::new("abcde", "abcde"),
+            Pattern::from(0b01_01_01_01_01)
+        );
+    }
+
+    #[test]
+    fn diff_ignores_characters_past_the_fifth() {
+        assert_eq!(
+            Pattern::new("abcdef", "abcdef"),
             Pattern::from(0b01_01_01_01_01)
         );
     }

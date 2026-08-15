@@ -8,4 +8,4 @@ pub use cache::Cache;
 pub use freq::CharFreq;
 pub use pattern::Pattern;
 pub use rank::{Ranking, Rankings, rank};
-pub use rule::RuleSet;
+pub use rule::{RuleError, RuleSet};

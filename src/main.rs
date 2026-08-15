@@ -5,7 +5,6 @@ use std::error::Error;
 use std::fs::{create_dir_all, read_to_string};
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
-use std::process::exit;
 
 use getopts::Options;
 use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
@@ -13,31 +12,9 @@ use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
 const WORDS: &str = include_str!("../data/words");
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().collect();
-    let mut opts = Options::new();
-    opts.optmulti("c", "contains", "List of contains rules", "L3");
-    opts.optmulti("m", "match", "List of match rules", "S1,E5");
-    opts.optmulti("n", "none", "List of none rules", "R,N");
-    opts.optmulti("o", "once", "List of once rules", "E");
-    opts.optflag("", "no-cache", "Rank without reading or writing the cache");
-    opts.optopt("", "cache", "Read or create the cache at this path", "DIR");
-    opts.optopt("", "dict", "Read words from dictionary file", "FILE");
-    opts.optopt("", "limit", "Limit output words (default: 5)", "NUM");
-    opts.optflag("", "no-limit", "Print all candidate words");
-    opts.optflag("", "frequency", "Print character frequencies");
-    opts.optflag("", "patterns", "Print sample patterns");
-    opts.optflag("", "words", "Print built-in dictionary");
-    opts.optflag("v", "verbose", "Print ranked words with scores");
-    opts.optflag("V", "version", "Print version information");
-    opts.optflag("h", "help", "Print this help message");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            eprintln!("{}", f);
-            exit(1);
-        }
-    };
+    let args = args()?;
+    let opts = opts();
+    let matches = opts.parse(&args[1..])?;
 
     if matches.opt_present("help") {
         println!("A Wordle solver\n");
@@ -83,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(value) => value.parse::<usize>().map_err(|_| {
                 io::Error::new(
                     ErrorKind::InvalidInput,
-                    format!("invalid --limit value: {value}"),
+                    format!("Invalid --limit value: {value}"),
                 )
             })?,
             None => 5,
@@ -94,7 +71,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(path) => Cow::Owned(read_to_string(path)?.to_lowercase()),
         None => Cow::Borrowed(WORDS),
     };
-    let words: Vec<&str> = dictionary.lines().collect();
+    let words: Vec<&str> = dictionary
+        .lines()
+        .map(|word| {
+            if word.chars().count() == 5 {
+                Ok(word)
+            } else {
+                Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Dictionary word must have five characters: {word}"),
+                ))
+            }
+        })
+        .collect::<Result<_, _>>()?;
 
     if matches.opt_present("frequency") {
         for frequency in CharFreq::frequencies(&words) {
@@ -103,19 +92,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let rules = match RuleSet::builder()
+    let rules = RuleSet::builder()
         .matches(&matches.opt_strs("match"))
         .contains(&matches.opt_strs("contains"))
         .none(&matches.opt_strs("none"))
         .once(&matches.opt_strs("once"))
-        .build()
-    {
-        Ok(rules) => rules,
-        Err(error) => {
-            eprintln!("{error}");
-            exit(1);
-        }
-    };
+        .build()?;
 
     let candidates = rules.filter(&words);
 
@@ -142,6 +124,39 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn opts() -> Options {
+    let mut opts = Options::new();
+    opts.optmulti("c", "contains", "List of contains rules", "L3");
+    opts.optmulti("m", "match", "List of match rules", "S1,E5");
+    opts.optmulti("n", "none", "List of none rules", "R,N");
+    opts.optmulti("o", "once", "List of once rules", "E");
+    opts.optflag("", "no-cache", "Rank without reading or writing the cache");
+    opts.optopt("", "cache", "Read or create the cache at this path", "DIR");
+    opts.optopt("", "dict", "Read words from dictionary file", "FILE");
+    opts.optopt("", "limit", "Limit output words (default: 5)", "NUM");
+    opts.optflag("", "no-limit", "Print all candidate words");
+    opts.optflag("", "frequency", "Print character frequencies");
+    opts.optflag("", "patterns", "Print sample patterns");
+    opts.optflag("", "words", "Print built-in dictionary");
+    opts.optflag("v", "verbose", "Print ranked words with scores");
+    opts.optflag("V", "version", "Print version information");
+    opts.optflag("h", "help", "Print this help message");
+    opts
+}
+
+fn args() -> Result<Vec<String>, io::Error> {
+    env::args_os()
+        .map(|arg| {
+            arg.into_string().map_err(|arg| {
+                io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Invalid UTF-8 argument: {}", arg.to_string_lossy()),
+                )
+            })
+        })
+        .collect()
 }
 
 fn print_patterns() {
