@@ -1,6 +1,6 @@
 [package]
 name = "wordles"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["David Graham <david.malcom.graham@gmail.com>"]
 description = "A Wordle solver."
 repository = "https://github.com/dgraham/wordles"
