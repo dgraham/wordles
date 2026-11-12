@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
@@ -22,7 +23,7 @@ impl fmt::Display for RuleError {
 
 impl Error for RuleError {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Rule {
     Contains(char, u8),
     Match(char, u8),
@@ -41,6 +42,46 @@ impl Rule {
             Rule::Once(ch) => word.chars().filter(|&c| c == ch).count() == 1,
         }
     }
+
+    fn priority(&self) -> u8 {
+        match self {
+            Rule::Match(ch, _) if is_infrequent(*ch) => 0,
+            Rule::Match(_, _) => 1,
+            Rule::Contains(ch, _) if is_infrequent(*ch) => 2,
+            Rule::Contains(_, _) => 3,
+            Rule::Once(_) => 4,
+            Rule::None(ch) if is_frequent(*ch) => 5,
+            Rule::None(_) => 6,
+        }
+    }
+
+    fn sort_key(&self) -> (u8, char, u8) {
+        let (ch, pos) = match *self {
+            Rule::Match(ch, pos) | Rule::Contains(ch, pos) => (ch, pos),
+            Rule::None(ch) | Rule::Once(ch) => (ch, 0),
+        };
+        (self.priority(), ch, pos)
+    }
+}
+
+impl Ord for Rule {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.sort_key().cmp(&other.sort_key())
+    }
+}
+
+impl PartialOrd for Rule {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn is_infrequent(ch: char) -> bool {
+    matches!(ch.to_ascii_lowercase(), 'j' | 'q' | 'x' | 'z' | 'v')
+}
+
+fn is_frequent(ch: char) -> bool {
+    matches!(ch.to_ascii_lowercase(), 'e' | 'a' | 'r' | 'o' | 't')
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,6 +128,10 @@ impl RuleSet {
         self.rules.push(rule);
     }
 
+    pub fn sort(&mut self) {
+        self.rules.sort_unstable();
+    }
+
     pub fn matches(&self, word: &str) -> bool {
         self.rules.iter().all(|rule| rule.matches(word))
     }
@@ -110,6 +155,7 @@ impl FromIterator<Rule> for RuleSet {
     fn from_iter<T: IntoIterator<Item = Rule>>(rules: T) -> Self {
         let mut set = Self::new();
         set.extend(rules);
+        set.sort();
         set
     }
 }
@@ -142,7 +188,10 @@ impl RuleSetBuilder {
     }
 
     pub fn build(self) -> Result<RuleSet, RuleError> {
-        self.result
+        self.result.map(|mut rules| {
+            rules.sort();
+            rules
+        })
     }
 
     fn position_rules(mut self, values: &[impl AsRef<str>], rule: fn(char, u8) -> Rule) -> Self {
@@ -210,6 +259,7 @@ mod tests {
         rules.push(Rule::None('r'));
         rules.push(Rule::None('n'));
         rules.push(Rule::Once('e'));
+        rules.sort();
 
         assert!(rules.matches("slate"));
         assert!(!rules.matches("spate"));
@@ -227,6 +277,12 @@ mod tests {
 
         assert!(rules.matches("slate"));
         assert!(!rules.matches("spate"));
+        assert!(
+            rules
+                .rules
+                .windows(2)
+                .all(|pair| pair[0].priority() <= pair[1].priority())
+        );
     }
 
     #[test]
@@ -252,5 +308,32 @@ mod tests {
         let rules: RuleSet = [Rule::Match('s', 1)].into_iter().collect();
 
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
+    }
+
+    #[test]
+    fn rules_are_ordered_by_selectivity_heuristic() {
+        let rules: RuleSet = [
+            Rule::None('j'),
+            Rule::Once('a'),
+            Rule::Contains('e', 3),
+            Rule::Contains('j', 3),
+            Rule::None('e'),
+            Rule::Match('s', 1),
+            Rule::Match('q', 2),
+            Rule::Match('j', 1),
+        ]
+        .into_iter()
+        .collect();
+
+        let priorities = rules.rules.iter().map(Rule::priority).collect::<Vec<_>>();
+        assert!(priorities.windows(2).all(|pair| pair[0] <= pair[1]));
+        assert!(matches!(rules.rules[0], Rule::Match('j', _)));
+        assert!(matches!(rules.rules[1], Rule::Match('q', _)));
+        assert!(matches!(rules.rules[2], Rule::Match('s', _)));
+        assert!(matches!(rules.rules[3], Rule::Contains('j', _)));
+        assert!(matches!(rules.rules[4], Rule::Contains('e', _)));
+        assert!(matches!(rules.rules[5], Rule::Once('a')));
+        assert!(matches!(rules.rules[6], Rule::None('e')));
+        assert!(matches!(rules.rules[7], Rule::None('j')));
     }
 }
