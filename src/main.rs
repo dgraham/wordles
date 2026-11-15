@@ -106,8 +106,8 @@ fn run() -> Result<(), Box<dyn Error>> {
     let rules = RuleSet::builder()
         .matches(&matches.opt_strs("match"))
         .contains(&matches.opt_strs("contains"))
-        .none(&matches.opt_strs("none"))
         .once(&matches.opt_strs("once"))
+        .none(&matches.opt_strs("none"))
         .build()?;
 
     let candidates = rules.filter(&words);

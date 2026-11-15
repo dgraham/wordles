@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 
@@ -23,10 +24,38 @@ impl fmt::Display for RuleError {
 
 impl Error for RuleError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position(u8);
+
+impl Position {
+    pub const fn index(self) -> usize {
+        (self.0 - 1) as usize
+    }
+}
+
+impl From<Position> for u8 {
+    fn from(position: Position) -> Self {
+        position.0
+    }
+}
+
+impl TryFrom<u8> for Position {
+    type Error = RuleError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1..=5 => Ok(Self(value)),
+            _ => Err(RuleError::new(format!(
+                "Position must be between 1 and 5, got {value}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Rule {
-    Contains(char, u8),
-    Match(char, u8),
+    Contains(char, Position),
+    Match(char, Position),
     None(char),
     Once(char),
 }
@@ -34,9 +63,9 @@ pub enum Rule {
 impl Rule {
     pub fn matches(&self, word: &str) -> bool {
         match *self {
-            Rule::Match(ch, pos) => word.chars().nth((pos - 1) as usize) == Some(ch),
+            Rule::Match(ch, pos) => word.chars().nth(pos.index()) == Some(ch),
             Rule::Contains(ch, pos) => {
-                word.contains(ch) && !(word.chars().nth((pos - 1) as usize) == Some(ch))
+                word.contains(ch) && !(word.chars().nth(pos.index()) == Some(ch))
             }
             Rule::None(ch) => !word.contains(ch),
             Rule::Once(ch) => word.chars().filter(|&c| c == ch).count() == 1,
@@ -57,7 +86,7 @@ impl Rule {
 
     fn sort_key(&self) -> (u8, char, u8) {
         let (ch, pos) = match *self {
-            Rule::Match(ch, pos) | Rule::Contains(ch, pos) => (ch, pos),
+            Rule::Match(ch, pos) | Rule::Contains(ch, pos) => (ch, pos.into()),
             Rule::None(ch) | Rule::Once(ch) => (ch, 0),
         };
         (self.priority(), ch, pos)
@@ -87,7 +116,7 @@ fn is_frequent(ch: char) -> bool {
 #[derive(Debug, PartialEq, Eq)]
 struct CharPos {
     ch: char,
-    pos: u8,
+    pos: Position,
 }
 
 impl TryFrom<&str> for CharPos {
@@ -101,11 +130,10 @@ impl TryFrom<&str> for CharPos {
             .to_ascii_lowercase();
         let pos = chars
             .as_str()
-            .parse()
+            .parse::<u8>()
             .map_err(|_| RuleError::new(format!("Invalid number in '{value}'")))?;
-        if !(1..=5).contains(&pos) {
-            return Err(RuleError::new(format!("Invalid position in '{value}'")));
-        }
+        let pos = Position::try_from(pos)
+            .map_err(|_| RuleError::new(format!("Invalid position in '{value}'")))?;
 
         Ok(Self { ch, pos })
     }
@@ -194,7 +222,11 @@ impl RuleSetBuilder {
         })
     }
 
-    fn position_rules(mut self, values: &[impl AsRef<str>], rule: fn(char, u8) -> Rule) -> Self {
+    fn position_rules(
+        mut self,
+        values: &[impl AsRef<str>],
+        rule: fn(char, Position) -> Rule,
+    ) -> Self {
         self.result = self.result.and_then(|mut rules| {
             for value in values {
                 for value in value.as_ref().split(',') {
@@ -237,13 +269,16 @@ impl Default for RuleSetBuilder {
         Self::new()
     }
 }
-use std::collections::HashSet;
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
-    use super::{CharPos, Rule, RuleError, RuleSet};
+    use super::{CharPos, Position, Rule, RuleError, RuleSet};
+
+    fn position(value: u8) -> Position {
+        Position::try_from(value).unwrap()
+    }
 
     #[test]
     fn empty_rulesets_match_every_word() {
@@ -254,8 +289,8 @@ mod tests {
     #[test]
     fn ruleset_pushes_single_rules() {
         let mut rules = RuleSet::new();
-        rules.push(Rule::Match('s', 1));
-        rules.push(Rule::Contains('l', 3));
+        rules.push(Rule::Match('s', position(1)));
+        rules.push(Rule::Contains('l', position(3)));
         rules.push(Rule::None('r'));
         rules.push(Rule::None('n'));
         rules.push(Rule::Once('e'));
@@ -287,7 +322,13 @@ mod tests {
 
     #[test]
     fn char_pos_normalizes_uppercase_letters() {
-        assert_eq!(CharPos::try_from("S1"), Ok(CharPos { ch: 's', pos: 1 }));
+        assert_eq!(
+            CharPos::try_from("S1"),
+            Ok(CharPos {
+                ch: 's',
+                pos: Position(1)
+            })
+        );
     }
 
     #[test]
@@ -303,9 +344,19 @@ mod tests {
     }
 
     #[test]
+    fn position_accepts_only_word_positions() {
+        let first = Position::try_from(1).unwrap();
+        assert_eq!(first.index(), 0);
+        assert_eq!(u8::from(first), 1);
+        assert_eq!(Position::try_from(5).unwrap().index(), 4);
+        assert!(Position::try_from(0).is_err());
+        assert!(Position::try_from(6).is_err());
+    }
+
+    #[test]
     fn filter_returns_words_matching_rules() {
         let words = vec!["slate", "crate", "caper"];
-        let rules: RuleSet = [Rule::Match('s', 1)].into_iter().collect();
+        let rules: RuleSet = [Rule::Match('s', position(1))].into_iter().collect();
 
         assert_eq!(rules.filter(&words), HashSet::from(["slate"]));
     }
@@ -315,12 +366,12 @@ mod tests {
         let rules: RuleSet = [
             Rule::None('j'),
             Rule::Once('a'),
-            Rule::Contains('e', 3),
-            Rule::Contains('j', 3),
+            Rule::Contains('e', position(3)),
+            Rule::Contains('j', position(3)),
             Rule::None('e'),
-            Rule::Match('s', 1),
-            Rule::Match('q', 2),
-            Rule::Match('j', 1),
+            Rule::Match('s', position(1)),
+            Rule::Match('q', position(2)),
+            Rule::Match('j', position(1)),
         ]
         .into_iter()
         .collect();
