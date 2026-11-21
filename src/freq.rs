@@ -35,11 +35,17 @@ impl CharFreq {
         }
     }
 
-    pub fn frequencies(words: &[&str]) -> Vec<Self> {
+    pub fn frequencies<I, W>(words: I) -> Vec<Self>
+    where
+        I: IntoIterator<Item = W>,
+        W: AsRef<str>,
+    {
         let mut counts = HashMap::new();
-        let total = words.len() * 5;
+        let mut total = 0;
 
         for word in words {
+            let word = word.as_ref();
+            total += word.chars().count();
             for ch in word.chars() {
                 *counts.entry(ch).or_default() += 1;
             }

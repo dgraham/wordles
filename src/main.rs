@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use getopts::Options;
-use wordles::{Cache, CharFreq, Pattern, Ranking, RuleSet, rank};
+use wordles::{Cache, CharFreq, Dictionary, Pattern, Ranking, RuleSet, rank};
 
 const WORDS: &str = include_str!("../data/words");
 
@@ -78,26 +78,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         })
     };
 
-    let dictionary = match matches.opt_str("dict") {
+    let contents = match matches.opt_str("dict") {
         Some(path) => Cow::Owned(read_to_string(path)?.to_lowercase()),
         None => Cow::Borrowed(WORDS),
     };
-    let words: Vec<&str> = dictionary
-        .lines()
-        .map(|word| {
-            if word.chars().count() == 5 {
-                Ok(word)
-            } else {
-                Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Dictionary word must have five characters: {word}"),
-                ))
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    let dictionary = Dictionary::try_from(contents.as_bytes())?;
 
     if matches.opt_present("frequency") {
-        for frequency in CharFreq::frequencies(&words) {
+        for frequency in CharFreq::frequencies(dictionary.words()) {
             println!("{} {}", frequency.ch, frequency.percentage * 100.0);
         }
         return Ok(());
@@ -110,7 +98,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         .none(&matches.opt_strs("none"))
         .build()?;
 
-    let candidates = rules.filter(&words);
+    let candidates = dictionary.filter(&rules);
 
     let rankings = if matches.opt_present("no-cache") {
         rank(&candidates, limit)
@@ -123,7 +111,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         create_dir_all(&path)?;
         let cache = Cache::open(path)?;
         if needs_write {
-            cache.write(&words)?;
+            cache.write(dictionary.words())?;
         }
         cache.rank(&candidates, limit)?
     };

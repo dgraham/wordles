@@ -67,11 +67,14 @@ impl Cache {
         path.as_ref().join("data.mdb").is_file()
     }
 
-    pub fn write(&self, words: &[&str]) -> Result<(), lmdb::Error> {
+    pub fn write<'a, I>(&self, words: I) -> Result<(), lmdb::Error>
+    where
+        I: Clone + IntoIterator<Item = &'a str>,
+    {
         let mut txn = self.env.begin_rw_txn()?;
-        for word in words {
+        for word in words.clone() {
             let mut patterns: BTreeMap<Pattern, Vec<&str>> = BTreeMap::new();
-            for solution in words {
+            for solution in words.clone() {
                 let pattern = Pattern::new(word, solution);
                 if !pattern.is_empty() {
                     patterns.entry(pattern).or_default().push(solution);
@@ -83,7 +86,7 @@ impl Cache {
                 .map(Pattern::to_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            txn.put(self.db, word, &pats, WriteFlags::empty())?;
+            txn.put(self.db, &word, &pats, WriteFlags::empty())?;
 
             for (pattern, solutions) in patterns {
                 let key = format!("{word}:{pattern}");

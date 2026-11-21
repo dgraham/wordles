@@ -160,6 +160,10 @@ impl RuleSet {
         self.rules.sort_unstable();
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
     pub fn matches(&self, word: &str) -> bool {
         self.rules.iter().all(|rule| rule.matches(word))
     }
@@ -170,6 +174,10 @@ impl RuleSet {
             .filter(|word| self.matches(word))
             .copied()
             .collect()
+    }
+
+    pub(crate) fn rules(&self) -> &[Rule] {
+        &self.rules
     }
 }
 
@@ -282,13 +290,20 @@ mod tests {
 
     #[test]
     fn empty_rulesets_match_every_word() {
-        assert!(RuleSet::new().matches("slate"));
+        let empty = RuleSet::new();
+        assert!(empty.is_empty());
+        assert!(empty.matches("slate"));
+
+        let populated: RuleSet = [Rule::None('z')].into_iter().collect();
+        assert!(!populated.is_empty());
         assert!(RuleSet::default().matches("slate"));
     }
 
     #[test]
     fn ruleset_pushes_single_rules() {
         let mut rules = RuleSet::new();
+        assert!(rules.is_empty());
+
         rules.push(Rule::Match('s', position(1)));
         rules.push(Rule::Contains('l', position(3)));
         rules.push(Rule::None('r'));
@@ -298,6 +313,38 @@ mod tests {
 
         assert!(rules.matches("slate"));
         assert!(!rules.matches("spate"));
+        assert_eq!(rules.rules.len(), 5);
+    }
+
+    #[test]
+    fn rule_matching_handles_ascii_and_unicode_words() {
+        let word = "slate";
+        for (rule, expected) in [
+            (Rule::Match('s', position(1)), true),
+            (Rule::Match('s', position(2)), false),
+            (Rule::Contains('a', position(1)), true),
+            (Rule::Contains('s', position(1)), false),
+            (Rule::None('z'), true),
+            (Rule::None('s'), false),
+            (Rule::Once('a'), true),
+            (Rule::Once('x'), false),
+            (Rule::Match('é', position(1)), false),
+            (Rule::Contains('é', position(1)), false),
+            (Rule::None('é'), true),
+            (Rule::Once('é'), false),
+        ] {
+            assert_eq!(rule.matches(word), expected);
+        }
+
+        let unicode_rules: RuleSet = [
+            Rule::Match('a', position(2)),
+            Rule::Contains('é', position(2)),
+            Rule::Once('é'),
+            Rule::None('z'),
+        ]
+        .into_iter()
+        .collect();
+        assert!(unicode_rules.matches("éa"));
     }
 
     #[test]
