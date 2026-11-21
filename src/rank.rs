@@ -111,6 +111,7 @@ impl<'a> FromIterator<Ranking<'a>> for Rankings<'a> {
 }
 
 pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'a>> {
+    let limit = limit.map(|limit| limit.min(words.len()));
     let mut rankings = Rankings::new(limit);
 
     for guess in words {
@@ -234,6 +235,12 @@ mod tests {
             .map(|ranking| ranking.word)
             .collect();
         assert_eq!(words, ["groups", "max"]);
+    }
+
+    #[test]
+    fn ranking_limit_is_capped_to_candidate_count() {
+        let candidates = HashSet::from(["slate", "crate"]);
+        assert_eq!(rank(&candidates, Some(usize::MAX)).len(), candidates.len());
     }
 
     #[test]

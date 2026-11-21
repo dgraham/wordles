@@ -120,6 +120,7 @@ impl Cache {
         limit: Option<usize>,
     ) -> Result<Vec<Ranking<'a>>, CacheError> {
         let txn = self.env.begin_ro_txn()?;
+        let limit = limit.map(|limit| limit.min(words.len()));
         let mut rankings = Rankings::new(limit);
 
         for guess in words {
