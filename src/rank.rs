@@ -57,10 +57,14 @@ pub struct Rankings<'a> {
 impl<'a> Rankings<'a> {
     pub fn new(limit: Option<usize>) -> Self {
         let storage = match limit {
-            Some(limit) => RankingStorage::TopK {
-                rankings: BinaryHeap::with_capacity(limit),
-                k: limit,
-            },
+            Some(limit) => {
+                let rankings = if limit <= 25 {
+                    BinaryHeap::with_capacity(limit)
+                } else {
+                    BinaryHeap::new()
+                };
+                RankingStorage::TopK { rankings, k: limit }
+            }
             None => RankingStorage::All(Vec::new()),
         };
 
@@ -111,7 +115,6 @@ impl<'a> FromIterator<Ranking<'a>> for Rankings<'a> {
 }
 
 pub fn rank<'a>(words: &HashSet<&'a str>, limit: Option<usize>) -> Vec<Ranking<'a>> {
-    let limit = limit.map(|limit| limit.min(words.len()));
     let mut rankings = Rankings::new(limit);
 
     for guess in words {
@@ -238,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn ranking_limit_is_capped_to_candidate_count() {
+    fn ranking_limit_larger_than_candidates_returns_all_rankings() {
         let candidates = HashSet::from(["slate", "crate"]);
         assert_eq!(rank(&candidates, Some(usize::MAX)).len(), candidates.len());
     }
