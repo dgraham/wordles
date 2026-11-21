@@ -58,19 +58,52 @@ impl fmt::Display for Pattern {
 }
 
 fn diff(guess: &str, solution: &str) -> u16 {
-    guess
-        .chars()
-        .take(5)
-        .enumerate()
-        .fold(0, |pattern, (index, ch)| {
-            let value = if solution.chars().nth(index) == Some(ch) {
-                HIT
-            } else if solution.contains(ch) {
-                CONTAINS
-            } else {
-                MISS
-            };
+    let mut guess_chars = [None; 5];
+    for (slot, ch) in guess_chars.iter_mut().zip(guess.chars()) {
+        *slot = Some(ch);
+    }
 
+    let mut solution_chars = [None; 5];
+    for (slot, ch) in solution_chars.iter_mut().zip(solution.chars()) {
+        *slot = Some(ch);
+    }
+
+    let mut solution_counts = [0; 5];
+    for solution_char in solution.chars() {
+        for (index, guess_char) in guess_chars.iter().enumerate() {
+            if *guess_char == Some(solution_char) {
+                solution_counts[index] += 1;
+            }
+        }
+    }
+
+    let mut results = [MISS; 5];
+    for index in 0..5 {
+        if guess_chars[index].is_some_and(|ch| solution_chars[index] == Some(ch)) {
+            results[index] = HIT;
+        }
+    }
+
+    for index in 0..5 {
+        let Some(ch) = guess_chars[index] else {
+            continue;
+        };
+        if results[index] == HIT {
+            continue;
+        }
+
+        let matched_count = (0..5)
+            .filter(|&matched| guess_chars[matched] == Some(ch) && results[matched] != MISS)
+            .count();
+        if solution_counts[index] > matched_count {
+            results[index] = CONTAINS;
+        }
+    }
+
+    results
+        .iter()
+        .enumerate()
+        .fold(0, |pattern, (index, &value)| {
             pattern | (value << (8 - index * 2))
         })
 }
@@ -104,6 +137,22 @@ mod tests {
         assert_eq!(
             Pattern::new("abcde", "abcde"),
             Pattern::from(0b01_01_01_01_01)
+        );
+    }
+
+    #[test]
+    fn diff_counts_duplicate_letters_after_hits() {
+        assert_eq!(
+            Pattern::new("allee", "apple"),
+            Pattern::from(0b01_10_00_00_01)
+        );
+    }
+
+    #[test]
+    fn diff_counts_duplicate_unicode_letters_after_hits() {
+        assert_eq!(
+            Pattern::new("ééabc", "éxxyz"),
+            Pattern::from(0b01_00_00_00_00)
         );
     }
 
